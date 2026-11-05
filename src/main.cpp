@@ -104,6 +104,9 @@ int main(int argc, char** argv) {
                 else if (k == "fdp_narrow") cfg.fdp_narrow = v;
                 else if (k == "exact_weights") exact_weights = v;
                 else if (k == "lp_max_n") cfg.lp_max_n = (int)v;
+                else if (k == "lp_light_init") cfg.lp_light_init = v;
+                else if (k == "lp_cuts_round") cfg.lp_cuts_round = (int)v;
+                else if (k == "lp_min_ratio10") cfg.lp_min_ratio = v / 10.0;
                 else if (k == "lp_nodes") cfg.lp_nodes = v;
                 else if (k == "path_task") cfg.path_task = v;
                 else if (k == "task_budget") cfg.task_budget = v;

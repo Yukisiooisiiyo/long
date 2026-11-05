@@ -49,7 +49,11 @@ struct Config {
     // LP branch and cut for dense blocks
     bool fdp_narrow = true;      // one-word state keys for frontiers up to 12 wide
     bool lp_bnc = true;
-    int lp_max_n = 120;
+    int lp_max_n = 400;
+    long long lp_max_m = 20000;  // and edges (the simplex keeps a dense table)
+    int lp_cuts_round = 20;      // most violated cuts added per separation round
+    bool lp_light_init = true;   // no beam search before the LP
+    double lp_min_ratio = 1.0;   // every block the frontier DP does not take (was 2.0: dense only)
     long long lp_nodes = 3000;
     // Lagrangian branching: per-task multipliers, a budgeted search, then split by the next step
     bool path_task = true;           // also in the path phase (the cycle phase always uses it)
@@ -135,12 +139,14 @@ class Solver {
     }
 
     // ------------------------------------------------------------ initial solution portfolio
-    Sol initial(const Graph& g) {
+    // light: skip the beam search (the LP finds good solutions itself; on dense graphs the beam
+    // search was 96% of the time)
+    Sol initial(const Graph& g, bool light = false) {
         Sol best{0.0, {0}};
         if (g.n <= 5000) take(best, greedy(g));
         take(best, mst_diameter(g));
         if (g.edges.size() >= (size_t)g.n) take(best, fundamental_cycles(g));
-        if (g.n <= 800) take(best, beam_search(g));
+        if (g.n <= 800 && !light) take(best, beam_search(g));
         return best;
     }
     Sol polish(const Graph& g, Sol best, const LagrResult* lr) {
@@ -214,6 +220,12 @@ class Solver {
         for (auto& t : tasks) st.fdp_states = std::max(st.fdp_states, t.states), ok = ok && t.ok;
         return ok;
     }
+    // LP branch and cut for blocks the frontier DP does not take: up to lp_max_n vertices and at
+    // least lp_min_ratio edges per vertex
+    bool use_lp(const Graph& g) const {
+        return cfg.lp_bnc && g.n <= cfg.lp_max_n && (long long)g.edges.size() <= cfg.lp_max_m &&
+               (double)g.edges.size() >= cfg.lp_min_ratio * g.n;
+    }
     bool use_fdp(const Graph& g, FrontierOrder& o) {
         if (!cfg.fdp || g.n < cfg.fdp_min_n) return false;
         o = best_frontier_order(g);
@@ -280,7 +292,7 @@ class Solver {
 
     Sol solve_whole_impl(const Graph& g0, const std::vector<int>& to_global) {
         if (g0.n == 1) return {0.0, {0}};
-        Sol best = initial(g0);
+        Sol best = initial(g0, cfg.lp_light_init && use_lp(g0));
         LagrResult lr = subgradient(g0, best.len, cfg.lagr_iters);
         best = polish(g0, best, &lr);
         offer_global(best, to_global);
@@ -307,8 +319,9 @@ class Solver {
         Incumbent inc;
         inc.offer(best.len, best.path);
         // dense graphs: LP branch and cut first; if it proves the answer, done
-        if (cfg.lp_bnc && (long long)g.edges.size() > 2LL * g.n && g.n <= cfg.lp_max_n) {
+        if (use_lp(g)) {
             LPBranchCut bc(g, nullptr, -1, inc, ctl);
+            bc.cuts_per_round = cfg.lp_cuts_round;
             bc.node_cap = cfg.lp_nodes;
             auto r = bc.run();
             st.lp_nodes += r.nodes, st.lp_runs += 1;
@@ -759,6 +772,65 @@ class Solver {
                     ++st.fdp_fallback;
                 }
             }
+            // LP branch and cut for the same answers; whatever it proves is not searched again
+            bool done_top = false, done_via = p < 0;
+            if (use_lp(lg)) {
+                {  // (1) + (2): best path with end bonuses or cycle, only if better than the answer so far
+                    Incumbent inc;
+                    inc.best.store(bestv);
+                    LPBranchCut bc(lg, &bonus, -1, inc, ctl);
+                    bc.cuts_per_round = cfg.lp_cuts_round;
+                    bc.node_cap = cfg.lp_nodes;
+                    auto r = bc.run();
+                    st.lp_nodes += r.nodes, ++st.lp_runs;
+                    if (ctl.stop) throw Timeout{};
+                    if (r.proved) {
+                        done_top = true;
+                        if (!inc.path.empty() && better(inc.get())) {
+                            auto lp_ = inc.path;
+                            if (lp_.size() > 2 && lp_.front() == lp_.back()) {
+                                bestv = inc.get(), bestmk = [q = G(lp_)] { return q; };
+                            } else {
+                                int x = vs[lp_.front()], y = vs[lp_.back()];
+                                bool ex = bonus[lp_.front()] > 0, ey = bonus[lp_.back()] > 0;
+                                bestv = inc.get(), bestmk = [=, q = G(lp_), &exp_down] {
+                                    std::vector<int> r2 = ex ? rev(exp_down(x)) : std::vector<int>{x};
+                                    r2 = cat(r2, q);
+                                    if (ey) r2 = cat(r2, exp_down(y));
+                                    return r2;
+                                };
+                            }
+                        }
+                    } else
+                        ++st.lp_fallback;
+                }
+                if (p >= 0) {  // (3): exact best path from the parent articulation
+                    Incumbent inc;
+                    int pl = loc[p];
+                    for (auto [v, e] : lg.adj[pl]) {  // seed: the heaviest single step (any valid path will do)
+                        double val = lg.edges[e].w + bonus[v];
+                        inc.offer(val, std::vector<int>{pl, v});
+                    }
+                    LPBranchCut bc(lg, &bonus, pl, inc, ctl);
+                    bc.cuts_per_round = cfg.lp_cuts_round;
+                    bc.node_cap = cfg.lp_nodes;
+                    auto r = bc.run();
+                    st.lp_nodes += r.nodes, ++st.lp_runs;
+                    if (ctl.stop) throw Timeout{};
+                    if (r.proved && !inc.path.empty()) {
+                        done_via = true;
+                        auto lp_ = inc.path;
+                        if (lp_.front() != pl) std::reverse(lp_.begin(), lp_.end());
+                        bool ext = lp_.size() > 1 && bonus[lp_.back()] > 0;
+                        via[b] = Via{inc.get(), G(lp_), ext ? vs[lp_.back()] : -1};
+                    } else
+                        ++st.lp_fallback;
+                }
+                if (done_top && done_via) {
+                    for (int v : vs) loc[v] = -1;
+                    continue;
+                }
+            }
             // big block: three searches with end bonuses
             ++st.bnb_blocks;
             ensure_heur();
@@ -795,7 +867,7 @@ class Solver {
                 for (auto& x : S) st.nodes += x->nodes;
                 if (ctl.stop) throw Timeout{};
             };
-            {  // (1) best path topped at this block, against the best answer so far
+            if (!done_top) {  // (1) best path topped at this block, against the best answer so far
                 Incumbent inc;
                 inc.best.store(bestv);
                 // bonus-aware seed: without it the search starts far below the answer and spends
@@ -841,13 +913,13 @@ class Solver {
                         };
                 }
             }
-            {  // (2) best cycle inside the block
+            if (!done_top) {  // (2) best cycle inside the block
                 Incumbent inc;
                 inc.best.store(bestv);
                 search(inc, 1, -1);
                 if (!inc.path.empty() && better(inc.get())) bestv = inc.get(), bestmk = [q = G(inc.path)] { return q; };
             }
-            if (p >= 0) {  // (3) via: from the parent articulation, exact
+            if (!done_via) {  // (3) via: from the parent articulation, exact
                 Incumbent inc;
                 search(inc, 2, loc[p]);
                 auto lp_ = inc.path;

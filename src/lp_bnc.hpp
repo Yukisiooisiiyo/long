@@ -44,6 +44,7 @@ class BoundedSimplex {
     std::vector<int> idcol;              // row -> its identity column (slack / artificial)
     std::vector<std::vector<std::pair<int, double>>> rowsA;  // original rows over structural columns
     long long iters = 0, iter_cap = 200000;
+    Control* ctl = nullptr;  // time limit: checked every 64 pivots
 
     void init(int nstruct, const std::vector<double>& cost) {
         S = C = nstruct;
@@ -79,7 +80,63 @@ class BoundedSimplex {
         rowsA.push_back(a);
         ++R;
     }
+    // Remove rows whose own slack is basic (inactive cuts). Their slack column is a unit vector in
+    // that row only, so the rest of the tableau is unchanged. Returns old row -> new row (-1: gone).
+    std::vector<int> drop_rows(const std::vector<char>& drop) {
+        std::vector<char> dropcol(C, 0);
+        for (int r = 0; r < R; ++r)
+            if (drop[r]) dropcol[idcol[r]] = 1;
+        std::vector<int> colmap(C, -1), rowmap(R, -1);
+        int nc = 0, nr = 0;
+        for (int j = 0; j < C; ++j)
+            if (!dropcol[j]) colmap[j] = nc++;
+        for (int r = 0; r < R; ++r)
+            if (!drop[r]) rowmap[r] = nr++;
+        auto squeeze = [&](const std::vector<double>& v) {  // length C (+1 tail kept)
+            std::vector<double> o;
+            o.reserve(nc + 1);
+            for (int j = 0; j < C; ++j)
+                if (!dropcol[j]) o.push_back(v[j]);
+            if ((int)v.size() > C) o.push_back(v[C]);
+            return o;
+        };
+        std::vector<std::vector<double>> T2;
+        T2.reserve(nr);
+        std::vector<int> basic2, idcol2;
+        std::vector<double> b2;
+        std::vector<char> eq2;
+        std::vector<std::vector<std::pair<int, double>>> rowsA2;
+        for (int r = 0; r < R; ++r) {
+            if (drop[r]) continue;
+            T2.push_back(squeeze(T[r]));
+            basic2.push_back(colmap[basic[r]]);
+            idcol2.push_back(colmap[idcol[r]]);
+            b2.push_back(b[r]);
+            eq2.push_back(is_eq[r]);
+            rowsA2.push_back(std::move(rowsA[r]));
+        }
+        d = squeeze(d);
+        c = squeeze(c), l = squeeze(l), u = squeeze(u), xn = squeeze(xn);
+        T.swap(T2), basic.swap(basic2), idcol.swap(idcol2), b.swap(b2), is_eq.swap(eq2), rowsA.swap(rowsA2);
+        R = nr, C = nc;
+        pos.assign(C, -1);
+        for (int r = 0; r < R; ++r) pos[basic[r]] = r;
+        return rowmap;
+    }
     double xval(int j) const { return pos[j] >= 0 ? bval(pos[j]) : xn[j]; }
+    // values of all basic variables: rhs minus the nonbasic columns that sit at a nonzero bound
+    void basic_values(std::vector<double>& xb) const {
+        std::vector<int> nz;
+        for (int j = 0; j < C; ++j)
+            if (pos[j] < 0 && xn[j] != 0.0) nz.push_back(j);
+        xb.resize(R);
+        for (int r = 0; r < R; ++r) {
+            const std::vector<double>& tr = T[r];
+            double v = tr[C];
+            for (int j : nz) v -= tr[j] * xn[j];
+            xb[r] = v;
+        }
+    }
     double bval(int r) const {
         double v = T[r][C];
         for (int j = 0; j < C; ++j)
@@ -154,26 +211,33 @@ class BoundedSimplex {
 
    private:
     static constexpr double kBig = 1e30, kTol = 1e-9, kPiv = 1e-9;
+    std::vector<int> nzj;
+    std::vector<double> xb_;
 
     void pivot(int r, int q) {
         std::vector<double>& pr = T[r];
         double p = pr[q];
-        for (double& v : pr) v /= p;
+        nzj.clear();
+        for (int j = 0; j <= C; ++j)
+            if (pr[j] != 0.0) pr[j] /= p, nzj.push_back(j);  // the pivot row is often sparse
         for (int i = 0; i < R; ++i) {
             if (i == r) continue;
             double f = T[i][q];
             if (f == 0.0) continue;
             std::vector<double>& ti = T[i];
-            for (int j = 0; j <= C; ++j) ti[j] -= f * pr[j];
+            for (int j : nzj) ti[j] -= f * pr[j];
+            ti[q] = 0.0;
         }
         double f = d[q];
-        if (f != 0.0)
-            for (int j = 0; j <= C; ++j) d[j] -= f * pr[j];
+        if (f != 0.0) {
+            for (int j : nzj) d[j] -= f * pr[j];
+            d[q] = 0.0;
+        }
         int out = basic[r];
         pos[out] = -1;
         basic[r] = q;
         pos[q] = r;
-        ++iters;
+        if ((++iters & 63) == 0 && ctl) ctl->check();
     }
 
     int dual() {
@@ -181,9 +245,10 @@ class BoundedSimplex {
             if (iters > iter_cap) return 2;
             int r = -1;
             double worst = kTol, val = 0;
+            basic_values(xb_);
             for (int i = 0; i < R; ++i) {
                 int j = basic[i];
-                double x = bval(i);
+                double x = xb_[i];
                 double viol = std::max(l[j] - x, x - u[j]);
                 if (viol > worst) worst = viol, r = i, val = x;
             }
@@ -237,11 +302,12 @@ class BoundedSimplex {
             double theta = u[q] - l[q];  // bound flip
             int r = -1;
             double rtarget = 0;
+            basic_values(xb_);
             for (int i = 0; i < R; ++i) {
                 double a = T[i][q] * dir;  // x_Bi changes by -a * theta
                 if (std::fabs(a) < kPiv) continue;
                 int j = basic[i];
-                double x = bval(i);
+                double x = xb_[i];
                 double lim;
                 double tgt;
                 if (a > 0) lim = (x - l[j]) / a, tgt = l[j];
@@ -261,9 +327,10 @@ class BoundedSimplex {
             pivot(r, q);
             xn[jb] = rtarget;
             // check: a basic variable outside its bounds after the step means numerics: go dual
+            basic_values(xb_);
             for (int i = 0; i < R; ++i) {
                 int j = basic[i];
-                double x = bval(i);
+                double x = xb_[i];
                 if (x < l[j] - 1e-7 || x > u[j] + 1e-7) return 3;
             }
         }
@@ -282,7 +349,8 @@ class LPBranchCut {
         : g(g), bonus(bonus), forced(forced), inc(inc), ctl(ctl) {}
 
     long long node_cap = 3000;
-    int cut_cap = 600;
+    int cuts_per_round = 0;   // 0: all violated cuts found
+    int cut_cap = 20000;  // live cuts; inactive ones are purged
 
     Result run() {
         Result res;
@@ -298,6 +366,7 @@ class LPBranchCut {
         for (int v = 0; v < n; ++v)
             eu[ne + v] = v, ev[ne + v] = n, cost[ne + v] = (bonus && v != forced) ? (*bonus)[v] : 0.0;
         lp.init(S, cost);
+        lp.ctl = &ctl;
         cols.assign(S, {});
         for (int v = 0; v < N; ++v) {  // degree rows
             std::vector<std::pair<int, double>> a;
@@ -331,6 +400,25 @@ class LPBranchCut {
     long long nodes = 0, lps = 0;
     bool proved = true;
 
+    // drop inactive cuts (slack basic and positive) once there are many, to keep the tableau small
+    void purge() {
+        if (lp.R - N <= std::max(100, N)) return;
+        std::vector<char> drop(lp.R, 0);
+        int k = 0;
+        for (int r = N; r < lp.R; ++r)
+            if (lp.basic[r] == lp.idcol[r] && lp.xval(lp.idcol[r]) > 1e-6) drop[r] = 1, ++k;
+        if (k == 0) return;
+        auto rowmap = lp.drop_rows(drop);
+        for (auto& col : cols) {
+            std::vector<std::pair<int, double>> c2;
+            for (auto [r, v] : col)
+                if (rowmap[r] >= 0) c2.push_back({rowmap[r], v});
+            col.swap(c2);
+        }
+        purged += k;
+    }
+    long long purged = 0;
+
     void add_row(const std::vector<std::pair<int, double>>& a, double rhs, bool eq) {
         int r = lp.R;
         lp.add_row(a, rhs, eq);
@@ -343,9 +431,13 @@ class LPBranchCut {
         std::vector<double> x(m), y(N);
         for (int i = 0; i < m; ++i) x[i] = lp.xval(i);
         for (int v = 0; v < N; ++v) y[v] = lp.xval(m + v);
-        std::vector<std::vector<double>> cap(N, std::vector<double>(N, 0.0));
+        // support graph (edges with x > 0) as arcs with reverse arcs, for max flows
+        arc_to.clear(), arc_cap.clear(), head.assign(N, -1), nxt_arc.clear();
+        auto add_arc = [&](int a, int b2, double c) {
+            arc_to.push_back(b2), arc_cap.push_back(c), nxt_arc.push_back(head[a]), head[a] = (int)arc_to.size() - 1;
+        };
         for (int i = 0; i < m; ++i)
-            if (x[i] > 1e-9) cap[eu[i]][ev[i]] += x[i], cap[ev[i]][eu[i]] += x[i];
+            if (x[i] > 1e-9) add_arc(eu[i], ev[i], x[i]), add_arc(ev[i], eu[i], x[i]);
         std::vector<std::vector<char>> sides;
         // Gusfield: N-1 max flows give a tree of min cuts between all pairs
         std::vector<int> par(N, 0);
@@ -353,15 +445,18 @@ class LPBranchCut {
         for (int s = 1; s < N; ++s) {
             int t = par[s];
             std::vector<char> side;
-            double f = maxflow(cap, s, t, side);
+            if ((s & 15) == 0) ctl.check();
+            double f = maxflow(s, t, side);
             fl[s] = f;
             for (int v = s + 1; v < N; ++v)
                 if (side[v] && par[v] == t) par[v] = s;
             sides.push_back(side);
         }
         int added = 0;
-        std::vector<std::vector<char>> seen;
-        for (int s = 1; s < N && lp.R - N < cut_cap; ++s) {
+        // candidates, most violated first; at most cuts_per_round of them
+        std::vector<std::pair<double, int>> cand;
+        std::vector<std::pair<int, int>> ij(N, {-1, -1});
+        for (int s = 1; s < N; ++s) {
             const auto& side = sides[s - 1];  // side[v] = 1: v with s
             int bi = -1, bj = -1;
             for (int v = 0; v < N; ++v) {
@@ -372,45 +467,54 @@ class LPBranchCut {
             }
             if (bi < 0 || bj < 0) continue;
             double need = 2 * (y[bi] + y[bj] - 1);
-            if (fl[s] < need - 1e-6) {
-                if (std::find(seen.begin(), seen.end(), side) != seen.end()) continue;
-                seen.push_back(side);
-                // x(delta(S)) - 2 y_i - 2 y_j >= -2   <=>   -x(delta(S)) + 2 y_i + 2 y_j <= 2
-                std::vector<std::pair<int, double>> a;
-                for (int i = 0; i < m; ++i)
-                    if (side[eu[i]] != side[ev[i]]) a.push_back({i, -1.0});
-                a.push_back({m + bi, 2.0});
-                a.push_back({m + bj, 2.0});
-                add_row(a, 2.0, false);
-                ++added;
-            }
+            if (fl[s] < need - 1e-6) cand.push_back({need - fl[s], s}), ij[s] = {bi, bj};
+        }
+        std::sort(cand.rbegin(), cand.rend());
+        std::vector<std::vector<char>> seen;
+        for (auto [viol, s] : cand) {
+            if (lp.R - N >= cut_cap || (cuts_per_round > 0 && added >= cuts_per_round)) break;
+            const auto& side = sides[s - 1];
+            if (std::find(seen.begin(), seen.end(), side) != seen.end()) continue;
+            seen.push_back(side);
+            auto [bi, bj] = ij[s];
+            // x(delta(S)) - 2 y_i - 2 y_j >= -2   <=>   -x(delta(S)) + 2 y_i + 2 y_j <= 2
+            std::vector<std::pair<int, double>> a;
+            for (int i = 0; i < m; ++i)
+                if (side[eu[i]] != side[ev[i]]) a.push_back({i, -1.0});
+            a.push_back({m + bi, 2.0});
+            a.push_back({m + bj, 2.0});
+            add_row(a, 2.0, false);
+            ++added;
         }
         return added;
     }
 
-    // Edmonds-Karp on a dense capacity matrix; side = vertices reachable from s in the residual
-    double maxflow(const std::vector<std::vector<double>>& cap, int s, int t, std::vector<char>& side) {
-        int k = (int)cap.size();
-        std::vector<std::vector<double>> f(k, std::vector<double>(k, 0.0));
+    // Edmonds-Karp on the sparse support graph; side = vertices reachable from s in the residual
+    std::vector<int> arc_to, head, nxt_arc;
+    std::vector<double> arc_cap;
+    double maxflow(int s, int t, std::vector<char>& side) {
+        std::vector<double> f(arc_to.size(), 0.0);  // arc 2k and 2k+1 are each other's reverse
+        std::vector<int> pa(N);                     // arc used to reach a vertex
         double total = 0;
-        std::vector<int> prv(k);
         for (;;) {
-            std::fill(prv.begin(), prv.end(), -1);
-            prv[s] = s;
+            std::fill(pa.begin(), pa.end(), -1);
+            pa[s] = -2;
             std::vector<int> q{s};
-            for (size_t h = 0; h < q.size() && prv[t] < 0; ++h) {
+            for (size_t h = 0; h < q.size() && pa[t] == -1; ++h) {
                 int a = q[h];
-                for (int b2 = 0; b2 < k; ++b2)
-                    if (prv[b2] < 0 && cap[a][b2] - f[a][b2] > 1e-12) prv[b2] = a, q.push_back(b2);
+                for (int e = head[a]; e >= 0; e = nxt_arc[e]) {
+                    int b2 = arc_to[e];
+                    if (pa[b2] == -1 && arc_cap[e] - f[e] > 1e-12) pa[b2] = e, q.push_back(b2);
+                }
             }
-            if (prv[t] < 0) break;
+            if (pa[t] == -1) break;
             double aug = INFINITY;
-            for (int v = t; v != s; v = prv[v]) aug = std::min(aug, cap[prv[v]][v] - f[prv[v]][v]);
-            for (int v = t; v != s; v = prv[v]) f[prv[v]][v] += aug, f[v][prv[v]] -= aug;
+            for (int v = t; v != s; v = arc_to[pa[v] ^ 1]) aug = std::min(aug, arc_cap[pa[v]] - f[pa[v]]);
+            for (int v = t; v != s; v = arc_to[pa[v] ^ 1]) f[pa[v]] += aug, f[pa[v] ^ 1] -= aug;
             total += aug;
         }
-        side.assign(k, 0);
-        for (int v = 0; v < k; ++v) side[v] = prv[v] >= 0;
+        side.assign(N, 0);
+        for (int v = 0; v < N; ++v) side[v] = pa[v] != -1;
         return total;
     }
 
@@ -464,10 +568,7 @@ class LPBranchCut {
 
     void dfs(Result& res, int depth) {
         if (!proved) return;
-        if (ctl.stop) {
-            proved = false;
-            return;
-        }
+        ctl.check();  // throws Timeout when the time limit is reached
         if (++nodes > node_cap) {
             proved = false;
             return;
@@ -487,6 +588,7 @@ class LPBranchCut {
             }
             double ub = lp.safe_bound(cols);
             if (!gt(ub, inc.get())) return;
+            purge();
             int added = (round < 50) ? separate() : 0;
             if (added) continue;
             break;
