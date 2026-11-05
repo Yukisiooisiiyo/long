@@ -26,7 +26,10 @@ VARIANTS = [[], ON, ON + ["--t-dp", "0"], ON + ["--t-dp", "3"], ON + ["--t-dp", 
             ["--x", "fdp=0", "--x", "lp_max_n=100000"], ["--x", "lp_nodes=2", "--x", "fdp=0", "--x", "task_budget=1"],
             # small blocks: bitmask DP only / enumeration that gives up at once
             ["--x", "enum_n=0"], ["--x", "enum_budget=5"],
-            ["--x", "exact_weights=0"], ["--x", "fdp_narrow=0"] + ON]
+            ["--x", "exact_weights=0"], ["--x", "fdp_narrow=0"] + ON,
+            # LP on every block that is not thin, with the revised and with the dense-table simplex
+            ["--x", "fdp=0", "--t-dp", "0"], ["--x", "fdp=0", "--t-dp", "0", "--x", "lp_revised=0"],
+            ["--x", "fdp=0", "--x", "lp_revised=0"], ["--x", "lp_nodes=3", "--t-dp", "0", "--x", "fdp=0"]]
 rng = random.Random(SEED)
 bad = checks = 0
 for t in range(TRIALS):

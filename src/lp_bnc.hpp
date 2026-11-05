@@ -21,6 +21,7 @@
 
 #include "graph.hpp"
 #include "heuristics.hpp"
+#include "revised.hpp"
 #include "search.hpp"
 
 namespace lp {
@@ -337,7 +338,8 @@ class BoundedSimplex {
     }
 };
 
-class LPBranchCut {
+template <class LPT>
+class LPBranchCutT {
    public:
     struct Result {
         bool proved = false;  // true: no answer above `inc` exists beyond what was offered
@@ -345,7 +347,7 @@ class LPBranchCut {
     };
 
     // bonus may be null; forced >= 0: the path must have that vertex as an end (no cycles then)
-    LPBranchCut(const Graph& g, const std::vector<double>* bonus, int forced, Incumbent& inc, Control& ctl)
+    LPBranchCutT(const Graph& g, const std::vector<double>* bonus, int forced, Incumbent& inc, Control& ctl)
         : g(g), bonus(bonus), forced(forced), inc(inc), ctl(ctl) {}
 
     long long node_cap = 3000;
@@ -395,7 +397,7 @@ class LPBranchCut {
     Control& ctl;
     int n = 0, N = 0, ne = 0, S = 0;
     std::vector<int> eu, ev;
-    BoundedSimplex lp;
+    LPT lp;
     std::vector<std::vector<std::pair<int, double>>> cols;
     long long nodes = 0, lps = 0;
     bool proved = true;
@@ -628,5 +630,24 @@ class LPBranchCut {
         }
     }
 };
+
+using LPResult = LPBranchCutT<BoundedSimplex>::Result;
+
+// run the branch and cut with the dense-table simplex or the revised simplex
+inline LPResult run_lp_bnc(bool revised, const Graph& g, const std::vector<double>* bonus, int forced, Incumbent& inc,
+                           Control& ctl, long long node_cap, int cuts_round) {
+    auto go = [&](auto& bc) {
+        bc.node_cap = node_cap;
+        bc.cuts_per_round = cuts_round;
+        auto r = bc.run();
+        return LPResult{r.proved, r.nodes, r.lps, r.cuts};
+    };
+    if (revised) {
+        LPBranchCutT<RevisedSimplex> bc(g, bonus, forced, inc, ctl);
+        return go(bc);
+    }
+    LPBranchCutT<BoundedSimplex> bc(g, bonus, forced, inc, ctl);
+    return go(bc);
+}
 
 }  // namespace lp

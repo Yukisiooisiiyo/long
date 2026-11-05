@@ -51,6 +51,8 @@ struct Config {
     bool lp_bnc = true;
     int lp_max_n = 400;
     long long lp_max_m = 20000;  // and edges (the simplex keeps a dense table)
+    int fdp_lp_width = 14;       // with the revised simplex, blocks wider than this go to the LP first
+    bool lp_revised = true;      // revised simplex (sparse, product-form inverse) instead of the dense table
     int lp_cuts_round = 20;      // most violated cuts added per separation round
     bool lp_light_init = true;   // no beam search before the LP
     double lp_min_ratio = 1.0;   // every block the frontier DP does not take (was 2.0: dense only)
@@ -231,6 +233,8 @@ class Solver {
         o = best_frontier_order(g);
         int lim = (long long)g.edges.size() <= 2LL * g.n ? std::max(cfg.fdp_width, cfg.fdp_width_sparse)
                                                           : cfg.fdp_width;
+        // wider than fdp_lp_width: the LP (revised simplex) was faster in the measurements
+        if (cfg.lp_revised && o.width > cfg.fdp_lp_width && use_lp(g)) return false;
         return o.width <= std::min(lim, FrontierDP::kMaxWidth);
     }
 
@@ -320,10 +324,7 @@ class Solver {
         inc.offer(best.len, best.path);
         // dense graphs: LP branch and cut first; if it proves the answer, done
         if (use_lp(g)) {
-            LPBranchCut bc(g, nullptr, -1, inc, ctl);
-            bc.cuts_per_round = cfg.lp_cuts_round;
-            bc.node_cap = cfg.lp_nodes;
-            auto r = bc.run();
+            auto r = run_lp_bnc(cfg.lp_revised, g, nullptr, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round);
             st.lp_nodes += r.nodes, st.lp_runs += 1;
             if (ctl.stop) throw Timeout{};
             if (r.proved) {
@@ -778,10 +779,7 @@ class Solver {
                 {  // (1) + (2): best path with end bonuses or cycle, only if better than the answer so far
                     Incumbent inc;
                     inc.best.store(bestv);
-                    LPBranchCut bc(lg, &bonus, -1, inc, ctl);
-                    bc.cuts_per_round = cfg.lp_cuts_round;
-                    bc.node_cap = cfg.lp_nodes;
-                    auto r = bc.run();
+                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round);
                     st.lp_nodes += r.nodes, ++st.lp_runs;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved) {
@@ -811,10 +809,7 @@ class Solver {
                         double val = lg.edges[e].w + bonus[v];
                         inc.offer(val, std::vector<int>{pl, v});
                     }
-                    LPBranchCut bc(lg, &bonus, pl, inc, ctl);
-                    bc.cuts_per_round = cfg.lp_cuts_round;
-                    bc.node_cap = cfg.lp_nodes;
-                    auto r = bc.run();
+                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, pl, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round);
                     st.lp_nodes += r.nodes, ++st.lp_runs;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved && !inc.path.empty()) {
