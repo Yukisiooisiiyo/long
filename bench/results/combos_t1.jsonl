@@ -1,0 +1,147 @@
+{"cfg": "base", "inst": "cactus300", "threads": "1", "time": 0.009272879, "nodes": 0, "len": 301.2}
+{"cfg": "base", "inst": "cactus3000", "threads": "1", "time": 0.018106377, "nodes": 0, "len": 530.18}
+{"cfg": "base", "inst": "dense16", "threads": "1", "time": 0.005491669, "nodes": 418, "len": 125.98}
+{"cfg": "base", "inst": "dense18", "threads": "1", "time": 0.014892142, "nodes": 4331, "len": 135.31}
+{"cfg": "base", "inst": "dense22", "threads": "1", "time": 0.013079186, "nodes": 2046, "len": 181.26}
+{"cfg": "base", "inst": "dense26", "threads": "1", "time": 1.299432271, "nodes": 361175, "len": 228.41}
+{"cfg": "base", "inst": "dense30", "threads": "1", "time": 0.049434986, "nodes": 6296, "len": 261.44}
+{"cfg": "base", "inst": "dense36", "threads": "1", "time": 0.398312447, "nodes": 69416, "len": 321.0}
+{"cfg": "base", "inst": "grid5x5", "threads": "1", "time": 0.002602997, "nodes": 693, "len": 144.49}
+{"cfg": "base", "inst": "grid5x6", "threads": "1", "time": 0.002664652, "nodes": 286, "len": 192.01}
+{"cfg": "base", "inst": "grid6x10", "threads": "1", "time": 0.006779902, "nodes": 134, "len": 417.46}
+{"cfg": "base", "inst": "grid6x6", "threads": "1", "time": 0.00478692, "nodes": 1258, "len": 216.79}
+{"cfg": "base", "inst": "grid7x7", "threads": "1", "time": 0.015042918, "nodes": 7724, "len": 339.32}
+{"cfg": "base", "inst": "grid8x8", "threads": "1", "time": 1.410641188, "nodes": 791088, "len": 431.55}
+{"cfg": "base", "inst": "rail100", "threads": "1", "time": 0.003659709, "nodes": 0, "len": 423.88}
+{"cfg": "base", "inst": "rail1000", "threads": "1", "time": 0.039996192, "nodes": 2264, "len": 659.63}
+{"cfg": "base", "inst": "rail120", "threads": "1", "time": 0.008978152, "nodes": 210, "len": 474.81}
+{"cfg": "base", "inst": "rail160", "threads": "1", "time": 0.008352922, "nodes": 85, "len": 472.27}
+{"cfg": "base", "inst": "rail300", "threads": "1", "time": 0.032642857, "nodes": 864, "len": 844.95}
+{"cfg": "base", "inst": "rail3000", "threads": "1", "time": 0.277571892, "nodes": 98463, "len": 967.36}
+{"cfg": "base", "inst": "rail80", "threads": "1", "time": 0.012171615, "nodes": 2409, "len": 498.77}
+{"cfg": "C1 A2+B1", "inst": "cactus300", "threads": "1", "time": 0.011259156, "nodes": 0, "len": 301.2}
+{"cfg": "C1 A2+B1", "inst": "cactus3000", "threads": "1", "time": 0.022045904, "nodes": 0, "len": 530.18}
+{"cfg": "C1 A2+B1", "inst": "dense16", "threads": "1", "time": 0.006180819, "nodes": 911, "len": 125.98}
+{"cfg": "C1 A2+B1", "inst": "dense18", "threads": "1", "time": 0.007291018, "nodes": 476, "len": 135.31}
+{"cfg": "C1 A2+B1", "inst": "dense22", "threads": "1", "time": 0.014419924, "nodes": 1305, "len": 181.26}
+{"cfg": "C1 A2+B1", "inst": "dense26", "threads": "1", "time": 0.029947429, "nodes": 2294, "len": 228.41}
+{"cfg": "C1 A2+B1", "inst": "dense30", "threads": "1", "time": 0.113376508, "nodes": 28150, "len": 261.44}
+{"cfg": "C1 A2+B1", "inst": "dense36", "threads": "1", "time": 0.103633943, "nodes": 12165, "len": 321.0}
+{"cfg": "C1 A2+B1", "inst": "grid5x5", "threads": "1", "time": 0.003307686, "nodes": 1247, "len": 144.49}
+{"cfg": "C1 A2+B1", "inst": "grid5x6", "threads": "1", "time": 0.002987634, "nodes": 317, "len": 192.01}
+{"cfg": "C1 A2+B1", "inst": "grid6x10", "threads": "1", "time": 0.007549262, "nodes": 248, "len": 417.46}
+{"cfg": "C1 A2+B1", "inst": "grid6x6", "threads": "1", "time": 0.00514991, "nodes": 785, "len": 216.79}
+{"cfg": "C1 A2+B1", "inst": "grid7x7", "threads": "1", "time": 0.025344032, "nodes": 8580, "len": 339.32}
+{"cfg": "C1 A2+B1", "inst": "grid8x8", "threads": "1", "time": 0.135417327, "nodes": 46497, "len": 431.55}
+{"cfg": "C1 A2+B1", "inst": "rail100", "threads": "1", "time": 0.00369328, "nodes": 0, "len": 423.88}
+{"cfg": "C1 A2+B1", "inst": "rail1000", "threads": "1", "time": 0.03905059, "nodes": 2264, "len": 659.63}
+{"cfg": "C1 A2+B1", "inst": "rail120", "threads": "1", "time": 0.009078739, "nodes": 210, "len": 474.81}
+{"cfg": "C1 A2+B1", "inst": "rail160", "threads": "1", "time": 0.008429629, "nodes": 85, "len": 472.27}
+{"cfg": "C1 A2+B1", "inst": "rail300", "threads": "1", "time": 0.023438497, "nodes": 864, "len": 844.95}
+{"cfg": "C1 A2+B1", "inst": "rail3000", "threads": "1", "time": 0.287053681, "nodes": 98463, "len": 967.36}
+{"cfg": "C1 A2+B1", "inst": "rail80", "threads": "1", "time": 0.01256378, "nodes": 2409, "len": 498.77}
+{"cfg": "C2 A2+B1+B3L", "inst": "cactus300", "threads": "1", "time": 0.007256759, "nodes": 0, "len": 301.2}
+{"cfg": "C2 A2+B1+B3L", "inst": "cactus3000", "threads": "1", "time": 0.014583035, "nodes": 0, "len": 530.18}
+{"cfg": "C2 A2+B1+B3L", "inst": "dense16", "threads": "1", "time": 0.004384266, "nodes": 764, "len": 125.98}
+{"cfg": "C2 A2+B1+B3L", "inst": "dense18", "threads": "1", "time": 0.005282565, "nodes": 486, "len": 135.31}
+{"cfg": "C2 A2+B1+B3L", "inst": "dense22", "threads": "1", "time": 0.010734639, "nodes": 1165, "len": 181.26}
+{"cfg": "C2 A2+B1+B3L", "inst": "dense26", "threads": "1", "time": 0.023021621, "nodes": 2418, "len": 228.41}
+{"cfg": "C2 A2+B1+B3L", "inst": "dense30", "threads": "1", "time": 0.065148513, "nodes": 10231, "len": 261.44}
+{"cfg": "C2 A2+B1+B3L", "inst": "dense36", "threads": "1", "time": 0.136854898, "nodes": 17587, "len": 321.0}
+{"cfg": "C2 A2+B1+B3L", "inst": "grid5x5", "threads": "1", "time": 0.003437058, "nodes": 1406, "len": 144.49}
+{"cfg": "C2 A2+B1+B3L", "inst": "grid5x6", "threads": "1", "time": 0.002923705, "nodes": 318, "len": 192.01}
+{"cfg": "C2 A2+B1+B3L", "inst": "grid6x10", "threads": "1", "time": 0.008142058, "nodes": 423, "len": 417.46}
+{"cfg": "C2 A2+B1+B3L", "inst": "grid6x6", "threads": "1", "time": 0.004761498, "nodes": 818, "len": 216.79}
+{"cfg": "C2 A2+B1+B3L", "inst": "grid7x7", "threads": "1", "time": 0.024214161, "nodes": 12807, "len": 339.32}
+{"cfg": "C2 A2+B1+B3L", "inst": "grid8x8", "threads": "1", "time": 0.074278257, "nodes": 33432, "len": 431.55}
+{"cfg": "C2 A2+B1+B3L", "inst": "rail100", "threads": "1", "time": 0.003518776, "nodes": 0, "len": 423.88}
+{"cfg": "C2 A2+B1+B3L", "inst": "rail1000", "threads": "1", "time": 0.043590277, "nodes": 2264, "len": 659.63}
+{"cfg": "C2 A2+B1+B3L", "inst": "rail120", "threads": "1", "time": 0.0133859, "nodes": 210, "len": 474.81}
+{"cfg": "C2 A2+B1+B3L", "inst": "rail160", "threads": "1", "time": 0.013084563, "nodes": 85, "len": 472.27}
+{"cfg": "C2 A2+B1+B3L", "inst": "rail300", "threads": "1", "time": 0.027807521, "nodes": 864, "len": 844.95}
+{"cfg": "C2 A2+B1+B3L", "inst": "rail3000", "threads": "1", "time": 0.278761306, "nodes": 98463, "len": 967.36}
+{"cfg": "C2 A2+B1+B3L", "inst": "rail80", "threads": "1", "time": 0.012217015, "nodes": 2409, "len": 498.77}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "cactus300", "threads": "1", "time": 0.006972083, "nodes": 0, "len": 301.2}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "cactus3000", "threads": "1", "time": 0.014478616, "nodes": 0, "len": 530.18}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "dense16", "threads": "1", "time": 0.00435522, "nodes": 780, "len": 125.98}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "dense18", "threads": "1", "time": 0.005255892, "nodes": 504, "len": 135.31}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "dense22", "threads": "1", "time": 0.010467818, "nodes": 1187, "len": 181.26}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "dense26", "threads": "1", "time": 0.023156799, "nodes": 2444, "len": 228.41}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "dense30", "threads": "1", "time": 0.062587689, "nodes": 10261, "len": 261.44}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "dense36", "threads": "1", "time": 0.131937692, "nodes": 17623, "len": 321.0}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "grid5x5", "threads": "1", "time": 0.004011716, "nodes": 2028, "len": 144.49}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "grid5x6", "threads": "1", "time": 0.00391803, "nodes": 509, "len": 192.01}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "grid6x10", "threads": "1", "time": 0.00980682, "nodes": 483, "len": 417.46}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "grid6x6", "threads": "1", "time": 0.006428194, "nodes": 1269, "len": 216.79}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "grid7x7", "threads": "1", "time": 0.035000273, "nodes": 19951, "len": 339.32}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "grid8x8", "threads": "1", "time": 0.106327962, "nodes": 54109, "len": 431.55}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "rail100", "threads": "1", "time": 0.00362165, "nodes": 0, "len": 423.88}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "rail1000", "threads": "1", "time": 0.039787077, "nodes": 2264, "len": 659.63}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "rail120", "threads": "1", "time": 0.009326853, "nodes": 210, "len": 474.81}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "rail160", "threads": "1", "time": 0.008438612, "nodes": 85, "len": 472.27}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "rail300", "threads": "1", "time": 0.022692364, "nodes": 864, "len": 844.95}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "rail3000", "threads": "1", "time": 0.28662016, "nodes": 98463, "len": 967.36}
+{"cfg": "C3 A1+A2+B1+B3L", "inst": "rail80", "threads": "1", "time": 0.012360623, "nodes": 2409, "len": 498.77}
+{"cfg": "C4 A1+A2+B1", "inst": "cactus300", "threads": "1", "time": 0.007123493, "nodes": 0, "len": 301.2}
+{"cfg": "C4 A1+A2+B1", "inst": "cactus3000", "threads": "1", "time": 0.014685971, "nodes": 0, "len": 530.18}
+{"cfg": "C4 A1+A2+B1", "inst": "dense16", "threads": "1", "time": 0.004657754, "nodes": 927, "len": 125.98}
+{"cfg": "C4 A1+A2+B1", "inst": "dense18", "threads": "1", "time": 0.00535909, "nodes": 494, "len": 135.31}
+{"cfg": "C4 A1+A2+B1", "inst": "dense22", "threads": "1", "time": 0.011621835, "nodes": 1327, "len": 181.26}
+{"cfg": "C4 A1+A2+B1", "inst": "dense26", "threads": "1", "time": 0.023930975, "nodes": 2320, "len": 228.41}
+{"cfg": "C4 A1+A2+B1", "inst": "dense30", "threads": "1", "time": 0.139782776, "nodes": 28180, "len": 261.44}
+{"cfg": "C4 A1+A2+B1", "inst": "dense36", "threads": "1", "time": 0.104038718, "nodes": 12201, "len": 321.0}
+{"cfg": "C4 A1+A2+B1", "inst": "grid5x5", "threads": "1", "time": 0.003712771, "nodes": 1869, "len": 144.49}
+{"cfg": "C4 A1+A2+B1", "inst": "grid5x6", "threads": "1", "time": 0.003025682, "nodes": 508, "len": 192.01}
+{"cfg": "C4 A1+A2+B1", "inst": "grid6x10", "threads": "1", "time": 0.007673677, "nodes": 308, "len": 417.46}
+{"cfg": "C4 A1+A2+B1", "inst": "grid6x6", "threads": "1", "time": 0.004907859, "nodes": 1236, "len": 216.79}
+{"cfg": "C4 A1+A2+B1", "inst": "grid7x7", "threads": "1", "time": 0.026404926, "nodes": 15724, "len": 339.32}
+{"cfg": "C4 A1+A2+B1", "inst": "grid8x8", "threads": "1", "time": 0.109188339, "nodes": 54601, "len": 431.55}
+{"cfg": "C4 A1+A2+B1", "inst": "rail100", "threads": "1", "time": 0.005122705, "nodes": 0, "len": 423.88}
+{"cfg": "C4 A1+A2+B1", "inst": "rail1000", "threads": "1", "time": 0.053301282, "nodes": 2264, "len": 659.63}
+{"cfg": "C4 A1+A2+B1", "inst": "rail120", "threads": "1", "time": 0.008617762, "nodes": 210, "len": 474.81}
+{"cfg": "C4 A1+A2+B1", "inst": "rail160", "threads": "1", "time": 0.01091971, "nodes": 85, "len": 472.27}
+{"cfg": "C4 A1+A2+B1", "inst": "rail300", "threads": "1", "time": 0.022679793, "nodes": 864, "len": 844.95}
+{"cfg": "C4 A1+A2+B1", "inst": "rail3000", "threads": "1", "time": 0.295720467, "nodes": 98463, "len": 967.36}
+{"cfg": "C4 A1+A2+B1", "inst": "rail80", "threads": "1", "time": 0.01247475, "nodes": 2409, "len": 498.77}
+{"cfg": "C5 B1+B3L", "inst": "cactus300", "threads": "1", "time": 0.00987622, "nodes": 0, "len": 301.2}
+{"cfg": "C5 B1+B3L", "inst": "cactus3000", "threads": "1", "time": 0.019845487, "nodes": 0, "len": 530.18}
+{"cfg": "C5 B1+B3L", "inst": "dense16", "threads": "1", "time": 0.006618245, "nodes": 764, "len": 125.98}
+{"cfg": "C5 B1+B3L", "inst": "dense18", "threads": "1", "time": 0.005696901, "nodes": 486, "len": 135.31}
+{"cfg": "C5 B1+B3L", "inst": "dense22", "threads": "1", "time": 0.011225706, "nodes": 1165, "len": 181.26}
+{"cfg": "C5 B1+B3L", "inst": "dense26", "threads": "1", "time": 0.027348679, "nodes": 2418, "len": 228.41}
+{"cfg": "C5 B1+B3L", "inst": "dense30", "threads": "1", "time": 0.062538459, "nodes": 10231, "len": 261.44}
+{"cfg": "C5 B1+B3L", "inst": "dense36", "threads": "1", "time": 0.131152221, "nodes": 17587, "len": 321.0}
+{"cfg": "C5 B1+B3L", "inst": "grid5x5", "threads": "1", "time": 0.003088462, "nodes": 1104, "len": 144.49}
+{"cfg": "C5 B1+B3L", "inst": "grid5x6", "threads": "1", "time": 0.002901376, "nodes": 318, "len": 192.01}
+{"cfg": "C5 B1+B3L", "inst": "grid6x10", "threads": "1", "time": 0.008791049, "nodes": 423, "len": 417.46}
+{"cfg": "C5 B1+B3L", "inst": "grid6x6", "threads": "1", "time": 0.004737052, "nodes": 1182, "len": 216.79}
+{"cfg": "C5 B1+B3L", "inst": "grid7x7", "threads": "1", "time": 0.037193585, "nodes": 22518, "len": 339.32}
+{"cfg": "C5 B1+B3L", "inst": "grid8x8", "threads": "1", "time": 0.064167085, "nodes": 32122, "len": 431.55}
+{"cfg": "C5 B1+B3L", "inst": "rail100", "threads": "1", "time": 0.003395641, "nodes": 0, "len": 423.88}
+{"cfg": "C5 B1+B3L", "inst": "rail1000", "threads": "1", "time": 0.038970495, "nodes": 2264, "len": 659.63}
+{"cfg": "C5 B1+B3L", "inst": "rail120", "threads": "1", "time": 0.008864655, "nodes": 210, "len": 474.81}
+{"cfg": "C5 B1+B3L", "inst": "rail160", "threads": "1", "time": 0.008394483, "nodes": 85, "len": 472.27}
+{"cfg": "C5 B1+B3L", "inst": "rail300", "threads": "1", "time": 0.023566157, "nodes": 864, "len": 844.95}
+{"cfg": "C5 B1+B3L", "inst": "rail3000", "threads": "1", "time": 0.31193111, "nodes": 98463, "len": 967.36}
+{"cfg": "C5 B1+B3L", "inst": "rail80", "threads": "1", "time": 0.012367139, "nodes": 2409, "len": 498.77}
+{"cfg": "C6 A2+B3L", "inst": "cactus300", "threads": "1", "time": 0.007547852, "nodes": 0, "len": 301.2}
+{"cfg": "C6 A2+B3L", "inst": "cactus3000", "threads": "1", "time": 0.015910183, "nodes": 0, "len": 530.18}
+{"cfg": "C6 A2+B3L", "inst": "dense16", "threads": "1", "time": 0.004028005, "nodes": 446, "len": 125.98}
+{"cfg": "C6 A2+B3L", "inst": "dense18", "threads": "1", "time": 0.007419352, "nodes": 1307, "len": 135.31}
+{"cfg": "C6 A2+B3L", "inst": "dense22", "threads": "1", "time": 0.012883649, "nodes": 1963, "len": 181.26}
+{"cfg": "C6 A2+B3L", "inst": "dense26", "threads": "1", "time": 0.787234838, "nodes": 202944, "len": 228.41}
+{"cfg": "C6 A2+B3L", "inst": "dense30", "threads": "1", "time": 0.05353749, "nodes": 7366, "len": 261.44}
+{"cfg": "C6 A2+B3L", "inst": "dense36", "threads": "1", "time": 0.338439783, "nodes": 56193, "len": 321.0}
+{"cfg": "C6 A2+B3L", "inst": "grid5x5", "threads": "1", "time": 0.003111104, "nodes": 1303, "len": 144.49}
+{"cfg": "C6 A2+B3L", "inst": "grid5x6", "threads": "1", "time": 0.002836888, "nodes": 277, "len": 192.01}
+{"cfg": "C6 A2+B3L", "inst": "grid6x10", "threads": "1", "time": 0.007192889, "nodes": 209, "len": 417.46}
+{"cfg": "C6 A2+B3L", "inst": "grid6x6", "threads": "1", "time": 0.004296219, "nodes": 729, "len": 216.79}
+{"cfg": "C6 A2+B3L", "inst": "grid7x7", "threads": "1", "time": 0.018222161, "nodes": 9348, "len": 339.32}
+{"cfg": "C6 A2+B3L", "inst": "grid8x8", "threads": "1", "time": 0.063303359, "nodes": 30084, "len": 431.55}
+{"cfg": "C6 A2+B3L", "inst": "rail100", "threads": "1", "time": 0.003752009, "nodes": 0, "len": 423.88}
+{"cfg": "C6 A2+B3L", "inst": "rail1000", "threads": "1", "time": 0.059340318, "nodes": 2264, "len": 659.63}
+{"cfg": "C6 A2+B3L", "inst": "rail120", "threads": "1", "time": 0.01343151, "nodes": 210, "len": 474.81}
+{"cfg": "C6 A2+B3L", "inst": "rail160", "threads": "1", "time": 0.012797097, "nodes": 85, "len": 472.27}
+{"cfg": "C6 A2+B3L", "inst": "rail300", "threads": "1", "time": 0.02239687, "nodes": 864, "len": 844.95}
+{"cfg": "C6 A2+B3L", "inst": "rail3000", "threads": "1", "time": 0.287530038, "nodes": 98463, "len": 967.36}
+{"cfg": "C6 A2+B3L", "inst": "rail80", "threads": "1", "time": 0.014835024, "nodes": 2409, "len": 498.77}

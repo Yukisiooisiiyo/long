@@ -1,0 +1,5 @@
+build/
+/longest
+/longest.exe
+__pycache__/
+*.pyc

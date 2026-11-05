@@ -1,0 +1,8 @@
+{"exp": "struct", "inst": "rail80", "n": 80, "m": 95, "blocks": 44, "max_block": 32, "arts_in_max_block": 15, "deg2": 27, "compressed_n": 53, "compressed_m": 68}
+{"exp": "struct", "inst": "rail120", "n": 120, "m": 142, "blocks": 82, "max_block": 25, "arts_in_max_block": 7, "deg2": 41, "compressed_n": 79, "compressed_m": 101}
+{"exp": "struct", "inst": "grid5x5", "n": 25, "m": 40, "blocks": 1, "max_block": 25, "arts_in_max_block": 0, "deg2": 4, "compressed_n": 21, "compressed_m": 36}
+{"exp": "struct", "inst": "grid5x6", "n": 30, "m": 49, "blocks": 1, "max_block": 30, "arts_in_max_block": 0, "deg2": 4, "compressed_n": 26, "compressed_m": 45}
+{"exp": "struct", "inst": "dense16", "n": 16, "m": 59, "blocks": 1, "max_block": 16, "arts_in_max_block": 0, "deg2": 0, "compressed_n": 16, "compressed_m": 59}
+{"exp": "struct", "inst": "dense18", "n": 18, "m": 74, "blocks": 1, "max_block": 18, "arts_in_max_block": 0, "deg2": 0, "compressed_n": 18, "compressed_m": 74}
+{"exp": "struct", "inst": "cactus300", "n": 300, "m": 391, "blocks": 79, "max_block": 7, "arts_in_max_block": 1, "deg2": 216, "compressed_n": 120, "compressed_m": 211}
+{"exp": "struct", "inst": "rail100", "n": 100, "m": 118, "blocks": 72, "max_block": 8, "arts_in_max_block": 4, "deg2": 32, "compressed_n": 69, "compressed_m": 87}
