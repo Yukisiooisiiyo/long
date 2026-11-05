@@ -52,6 +52,7 @@ struct Config {
     int lp_max_n = 400;
     long long lp_max_m = 20000;  // and edges (the simplex keeps a dense table)
     int fdp_lp_width = 14;       // with the revised simplex, blocks wider than this go to the LP first
+    bool lp_blossom = true;      // blossom cuts in the LP
     bool lp_revised = true;      // revised simplex (sparse, product-form inverse) instead of the dense table
     int lp_cuts_round = 20;      // most violated cuts added per separation round
     bool lp_light_init = true;   // no beam search before the LP
@@ -324,7 +325,7 @@ class Solver {
         inc.offer(best.len, best.path);
         // dense graphs: LP branch and cut first; if it proves the answer, done
         if (use_lp(g)) {
-            auto r = run_lp_bnc(cfg.lp_revised, g, nullptr, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round);
+            auto r = run_lp_bnc(cfg.lp_revised, g, nullptr, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom);
             st.lp_nodes += r.nodes, st.lp_runs += 1;
             if (ctl.stop) throw Timeout{};
             if (r.proved) {
@@ -779,7 +780,7 @@ class Solver {
                 {  // (1) + (2): best path with end bonuses or cycle, only if better than the answer so far
                     Incumbent inc;
                     inc.best.store(bestv);
-                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round);
+                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom);
                     st.lp_nodes += r.nodes, ++st.lp_runs;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved) {
@@ -809,7 +810,7 @@ class Solver {
                         double val = lg.edges[e].w + bonus[v];
                         inc.offer(val, std::vector<int>{pl, v});
                     }
-                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, pl, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round);
+                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, pl, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom);
                     st.lp_nodes += r.nodes, ++st.lp_runs;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved && !inc.path.empty()) {

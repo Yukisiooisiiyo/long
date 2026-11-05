@@ -107,6 +107,7 @@ int main(int argc, char** argv) {
                 else if (k == "lp_light_init") cfg.lp_light_init = v;
                 else if (k == "lp_cuts_round") cfg.lp_cuts_round = (int)v;
                 else if (k == "lp_revised") cfg.lp_revised = v;
+                else if (k == "lp_blossom") cfg.lp_blossom = v;
                 else if (k == "fdp_lp_width") cfg.fdp_lp_width = (int)v;
                 else if (k == "lp_min_ratio10") cfg.lp_min_ratio = v / 10.0;
                 else if (k == "lp_nodes") cfg.lp_nodes = v;

@@ -428,6 +428,65 @@ class LPBranchCutT {
     }
 
     // generalized subtour cuts violated by the current point
+    // Blossom cuts. For any vertex set H and any odd set T of edges leaving H:
+    //   x(E(H)) + x(T) - sum_{v in H} y_v <= (|T| - 1) / 2.
+    // It is half the degree rows of H plus half the bounds x_e <= 1 of T, rounded down
+    // (a Chvatal-Gomory cut), so it is valid whatever H and T are. Candidates: H = a connected
+    // piece of the fractional edges, T = the edges leaving H with x > 1/2 (made odd if needed).
+    int separate_blossoms() {
+        int m = ne + n;
+        std::vector<double> x(m), y(N);
+        for (int i = 0; i < m; ++i) x[i] = lp.xval(i);
+        for (int v = 0; v < N; ++v) y[v] = lp.xval(m + v);
+        std::vector<int> comp(N, -1), par(N);
+        std::iota(par.begin(), par.end(), 0);
+        std::function<int(int)> fnd = [&](int a) { return par[a] == a ? a : par[a] = fnd(par[a]); };
+        std::vector<char> touched(N, 0);
+        for (int i = 0; i < m; ++i)
+            if (x[i] > 1e-6 && x[i] < 1 - 1e-6) par[fnd(eu[i])] = fnd(ev[i]), touched[eu[i]] = touched[ev[i]] = 1;
+        std::vector<std::vector<int>> groups(N);
+        for (int v = 0; v < N; ++v)
+            if (touched[v]) groups[fnd(v)].push_back(v);
+        int added = 0;
+        for (auto& H : groups) {
+            if (H.size() < 3) continue;
+            std::vector<char> in(N, 0);
+            for (int v : H) in[v] = 1;
+            double inner = 0, ysum = 0;
+            std::vector<std::pair<double, int>> out;
+            for (int i = 0; i < m; ++i) {
+                bool a = in[eu[i]], b2 = in[ev[i]];
+                if (a && b2) inner += x[i];
+                else if (a != b2 && x[i] > 1e-9) out.push_back({x[i], i});
+            }
+            for (int v : H) ysum += y[v];
+            std::sort(out.rbegin(), out.rend());
+            int k = 0;
+            while (k < (int)out.size() && out[k].first > 0.5) ++k;
+            if (k % 2 == 0) {  // make it odd: drop the weakest tooth or add the next edge, whichever is better
+                if (k + 1 <= (int)out.size() && (k == 0 || out[k].first > 1 - out[k - 1].first)) ++k;
+                else --k;
+            }
+            if (k < 1) continue;
+            double tx = 0;
+            for (int t = 0; t < k; ++t) tx += out[t].first;
+            double viol = inner + tx - ysum - (k - 1) / 2.0;
+            if (viol <= 1e-6) continue;
+            std::vector<std::pair<int, double>> a;
+            for (int i = 0; i < m; ++i)
+                if (in[eu[i]] && in[ev[i]]) a.push_back({i, 1.0});
+            for (int t = 0; t < k; ++t) a.push_back({out[t].second, 1.0});
+            for (int v : H) a.push_back({m + v, -1.0});
+            add_row(a, (k - 1) / 2.0, false);
+            ++added, ++blossom_cuts;
+        }
+        return added;
+    }
+  public:
+    bool blossoms = false;
+    long long blossom_cuts = 0;
+  private:
+
     int separate() {
         int m = ne + n;
         std::vector<double> x(m), y(N);
@@ -592,6 +651,7 @@ class LPBranchCutT {
             if (!gt(ub, inc.get())) return;
             purge();
             int added = (round < 50) ? separate() : 0;
+            if (!added && blossoms && round < 50) added = separate_blossoms();
             if (added) continue;
             break;
         }
@@ -635,10 +695,11 @@ using LPResult = LPBranchCutT<BoundedSimplex>::Result;
 
 // run the branch and cut with the dense-table simplex or the revised simplex
 inline LPResult run_lp_bnc(bool revised, const Graph& g, const std::vector<double>* bonus, int forced, Incumbent& inc,
-                           Control& ctl, long long node_cap, int cuts_round) {
+                           Control& ctl, long long node_cap, int cuts_round, bool blossoms) {
     auto go = [&](auto& bc) {
         bc.node_cap = node_cap;
         bc.cuts_per_round = cuts_round;
+        bc.blossoms = blossoms;
         auto r = bc.run();
         return LPResult{r.proved, r.nodes, r.lps, r.cuts};
     };
