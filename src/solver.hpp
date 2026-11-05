@@ -47,6 +47,7 @@ struct Config {
     long long fdp_rank = 500000;     // rank-based reduction above this many states per step (0 = off)
     int fdp_rank_points = 16;
     // LP branch and cut for dense blocks
+    bool fdp_narrow = true;      // one-word state keys for frontiers up to 12 wide
     bool lp_bnc = true;
     int lp_max_n = 120;
     long long lp_nodes = 3000;
@@ -169,22 +170,30 @@ class Solver {
     };
     bool run_fdp(const Graph& g, const FrontierOrder& o, std::vector<FdpTask>& tasks) {
         std::atomic<bool> timeout{false};
+        auto run_with = [&](auto tag, FdpTask& t) {
+            using DP = typename decltype(tag)::type;
+            DP dp(g, o, ctl, cfg.fdp_budget, cfg.fdp_layer);
+            dp.rank_ = cfg.fdp_rank;
+            dp.rank_max_points = cfg.fdp_rank_points;
+            double lb = t.lb;
+            if (t.beam > 0) {  // a beam-limited pass first: a strong answer makes the exact pass prune
+                DP bd(g, o, ctl, cfg.fdp_budget, cfg.fdp_layer);
+                bd.rank_ = cfg.fdp_rank;
+                bd.rank_max_points = cfg.fdp_rank_points;
+                auto rb = bd.run(t.mode, t.bonus, t.forced, lb, t.lam, t.beam);
+                if (rb.ok && !rb.sol.path.empty()) t.out = rb.sol, lb = rb.sol.len;
+            }
+            auto r = dp.run(t.mode, t.bonus, t.forced, lb, t.lam);
+            if (r.ok && r.sol.path.empty() && !t.out.path.empty()) r.sol = t.out;  // the beam answer was optimal
+            t.ok = r.ok, t.out = r.sol, t.states = r.states;
+        };
         auto one = [&](FdpTask& t) {
             try {
-                FrontierDP dp(g, o, ctl, cfg.fdp_budget, cfg.fdp_layer);
-                dp.rank_ = cfg.fdp_rank;
-                dp.rank_max_points = cfg.fdp_rank_points;
-                double lb = t.lb;
-                if (t.beam > 0) {  // a beam-limited pass first: a strong answer makes the exact pass prune
-                    FrontierDP bd(g, o, ctl, cfg.fdp_budget, cfg.fdp_layer);
-                    bd.rank_ = cfg.fdp_rank;
-                    bd.rank_max_points = cfg.fdp_rank_points;
-                    auto rb = bd.run(t.mode, t.bonus, t.forced, lb, t.lam, t.beam);
-                    if (rb.ok && !rb.sol.path.empty()) t.out = rb.sol, lb = rb.sol.len;
-                }
-                auto r = dp.run(t.mode, t.bonus, t.forced, lb, t.lam);
-                if (r.ok && r.sol.path.empty() && !t.out.path.empty()) r.sol = t.out;  // the beam answer was optimal
-                t.ok = r.ok, t.out = r.sol, t.states = r.states;
+                // one-word state keys when the frontier is at most 12 wide
+                if (cfg.fdp_narrow && o.width <= FrontierDPT<1>::kMaxWidth)
+                    run_with(std::type_identity<FrontierDPT<1>>{}, t);
+                else
+                    run_with(std::type_identity<FrontierDPT<2>>{}, t);
             } catch (const Timeout&) {
                 timeout = true;
                 ctl.stop = true;

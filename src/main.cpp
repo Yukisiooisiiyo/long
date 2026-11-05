@@ -20,6 +20,9 @@
 #endif
 
 #include "solver.hpp"
+#ifndef LP_NO_POOL  // the program's own small-object allocator (opt out with -DLP_NO_POOL)
+#include "alloc.hpp"
+#endif
 
 using namespace lp;
 
@@ -59,7 +62,7 @@ int main(int argc, char** argv) {
     unsigned hw = std::thread::hardware_concurrency();
     cfg.threads = hw ? (int)hw : 1;
     cfg.threads_auto = true;  // cleared by --threads
-    bool time_limit = false, approx = false, verbose = false;
+    bool time_limit = false, approx = false, verbose = false, exact_weights = true;
     double limit_sec = 10.0;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -98,6 +101,8 @@ int main(int argc, char** argv) {
                 else if (k == "fdp_prune_width") cfg.fdp_prune_width = (int)v;
                 else if (k == "fdp_rank") cfg.fdp_rank = v;
                 else if (k == "lp_bnc") cfg.lp_bnc = v;
+                else if (k == "fdp_narrow") cfg.fdp_narrow = v;
+                else if (k == "exact_weights") exact_weights = v;
                 else if (k == "lp_max_n") cfg.lp_max_n = (int)v;
                 else if (k == "lp_nodes") cfg.lp_nodes = v;
                 else if (k == "path_task") cfg.path_task = v;
@@ -117,13 +122,15 @@ int main(int argc, char** argv) {
     std::string text((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
     std::vector<long long> ids;
     Graph g;
+    double scale = 0;
     try {
-        std::tie(ids, g) = parse(text);
+        std::tie(ids, g) = parse(text, &scale, exact_weights);
     } catch (const InputError& e) {
         std::cerr << "input error: " << e.what() << "\n";
         return 1;
     }
     if (g.n == 0) return 0;
+    g_exact = scale > 0;
 
     auto t0 = Clock::now();
     Control ctl;
@@ -163,8 +170,8 @@ int main(int argc, char** argv) {
         double sec = std::chrono::duration<double>(Clock::now() - t0).count();
         auto& s = solver.st;
         std::ostringstream os;
-        os.precision(10);
-        os << "length=" << best.len << " time=" << sec << "s nodes=" << s.nodes << " blocks=" << s.blocks
+        os.precision(15);
+        os << "length=" << (scale > 0 ? best.len / scale : best.len) << " time=" << sec << "s nodes=" << s.nodes << " blocks=" << s.blocks
            << " max_block=" << s.max_block << " bitdp_blocks=" << s.bitdp_blocks
            << " bnb_blocks=" << s.bnb_blocks << " dead_edges=" << s.dead
            << " lagr_off=" << s.lagr_off << " proved_at_root=" << s.proved_root

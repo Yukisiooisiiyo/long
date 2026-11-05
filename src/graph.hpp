@@ -16,7 +16,12 @@
 namespace lp {
 
 constexpr double kEps = 1e-9;
-inline bool gt(double a, double b) { return a > b + kEps * (1.0 + std::fabs(b)); }
+// Exact mode: when every distance in the input is a plain decimal with at most 6 digits after the
+// point, all distances are scaled to integers (e.g. 8.54 -> 854). Sums of integers below 2^53 are
+// exact in double, and any answer that beats another does so by at least 1, so "better" is
+// "larger by more than 0.5". Otherwise a relative tolerance absorbs rounding.
+inline bool g_exact = false;
+inline bool gt(double a, double b) { return g_exact ? a > b + 0.5 : a > b + kEps * (1.0 + std::fabs(b)); }
 
 struct Edge {
     int u, v;
@@ -70,8 +75,14 @@ struct InputError : std::runtime_error {
 // blank lines and a missing final newline are accepted. One pass over the buffer, no substrings.
 // Numbers are read with strtoll / strtod and must fill their trimmed field. Self loops are ignored;
 // for a duplicated route the longest distance is kept. Errors name the line.
-inline std::pair<std::vector<long long>, Graph> parse(const std::string& text) {
+// scale (out): 10^d when every distance is a plain decimal with at most d <= 6 decimals and the
+// scaled total stays below 2^50; the returned weights are then the scaled integers. 0 otherwise.
+inline std::pair<std::vector<long long>, Graph> parse(const std::string& text, double* scale = nullptr,
+                                                      bool allow_exact = true) {
     std::vector<long long> ids;
+    bool exact = allow_exact && scale;
+    int maxdec = 0;
+    std::vector<std::pair<long long, int>> digits;  // per raw edge: (digits as integer, decimals)
     std::unordered_map<long long, int> index;
     index.reserve(1024);
     struct E3 {
@@ -79,6 +90,7 @@ inline std::pair<std::vector<long long>, Graph> parse(const std::string& text) {
         double w;
     };
     std::vector<E3> raw;
+    std::pair<long long, int> cur_digits{0, 0};
     const char* base = text.c_str();
     size_t n = text.size(), pos = 0;
     int lineno = 0;
@@ -127,6 +139,24 @@ inline std::pair<std::vector<long long>, Graph> parse(const std::string& text) {
             errno = 0;
             w = std::strtod(base + fb[2], &end);  // the program never changes LC_NUMERIC
             if (fb[2] == fe[2] || end != base + fe[2] || (errno == ERANGE && std::isinf(w))) fail("not a number");
+            if (exact) {  // plain decimal? read it digit by digit, exactly
+                long long iv = 0;
+                int dec = -1, nd = 0;
+                size_t k = fb[2];
+                if (base[k] == '+') ++k;
+                for (; k < fe[2] && exact; ++k) {
+                    char ch = base[k];
+                    if (ch == '.' && dec < 0) dec = 0;
+                    else if (ch >= '0' && ch <= '9') {
+                        if (++nd > 15) exact = false;
+                        iv = iv * 10 + (ch - '0');
+                        if (dec >= 0) ++dec;
+                    } else
+                        exact = false;
+                }
+                if (nd == 0 || dec > 6) exact = false;
+                if (exact) maxdec = std::max(maxdec, std::max(dec, 0)), cur_digits = {iv, std::max(dec, 0)};
+            }
         }
         if (a <= 0 || b <= 0) fail("IDs must be positive integers");
         if (!(w >= 0) || std::isinf(w)) fail("distance must be a non-negative number");
@@ -142,9 +172,27 @@ inline std::pair<std::vector<long long>, Graph> parse(const std::string& text) {
                 uv[k++] = it->second;
             }
             raw.push_back({std::min(uv[0], uv[1]), std::max(uv[0], uv[1]), w});
+            if (exact) digits.push_back(cur_digits);
         }
         if (nl >= n) break;
     }
+    if (exact) {  // scale to integers if the total stays well inside the exact range of double
+        double p10 = 1;
+        for (int i = 0; i < maxdec; ++i) p10 *= 10;
+        double total = 0;
+        for (size_t i = 0; i < raw.size(); ++i) {
+            double f = 1;
+            for (int k = digits[i].second; k < maxdec; ++k) f *= 10;
+            raw[i].w = (double)digits[i].first * f;
+            total += raw[i].w;
+        }
+        if (total >= 1125899906842624.0) {  // 2^50: fall back to the decimal values
+            exact = false;
+            for (auto& e : raw) e.w /= p10;
+        } else if (scale)
+            *scale = p10;
+    }
+    if (!exact && scale) *scale = 0;
     std::sort(raw.begin(), raw.end(), [](const E3& x, const E3& y) { return x.u != y.u ? x.u < y.u : x.v < y.v; });
     std::vector<Edge> es;
     for (size_t i = 0; i < raw.size();) {

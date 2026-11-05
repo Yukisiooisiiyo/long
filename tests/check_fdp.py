@@ -25,7 +25,8 @@ VARIANTS = [[], ON, ON + ["--t-dp", "0"], ON + ["--t-dp", "3"], ON + ["--t-dp", 
             # LP branch and cut forced on everything dense enough, and with a tiny node cap (fallback)
             ["--x", "fdp=0", "--x", "lp_max_n=100000"], ["--x", "lp_nodes=2", "--x", "fdp=0", "--x", "task_budget=1"],
             # small blocks: bitmask DP only / enumeration that gives up at once
-            ["--x", "enum_n=0"], ["--x", "enum_budget=5"]]
+            ["--x", "enum_n=0"], ["--x", "enum_budget=5"],
+            ["--x", "exact_weights=0"], ["--x", "fdp_narrow=0"] + ON]
 rng = random.Random(SEED)
 bad = checks = 0
 for t in range(TRIALS):

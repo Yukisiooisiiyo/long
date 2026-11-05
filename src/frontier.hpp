@@ -16,6 +16,7 @@
 #include <numeric>
 #include <queue>
 #include <unordered_map>
+#include <type_traits>
 #include <vector>
 
 #include "graph.hpp"
@@ -145,9 +146,12 @@ inline FrontierOrder best_frontier_order(const Graph& g) {
     return best;
 }
 
-class FrontierDP {
+// KW = words per state key: 2 words hold up to 24 frontier slots; 1 word holds up to 12 (5 bits per
+// slot + 3 flag bits), which makes states smaller and hashing / comparing / unpacking cheaper.
+template <int KW>
+class FrontierDPT {
    public:
-    static constexpr int kMaxWidth = 24;  // 5 bits per slot, 24 slots + 3 flag bits fit 128 bits
+    static constexpr int kMaxWidth = KW == 1 ? 12 : 24;
 
     struct Result {
         bool ok = false;  // false: gave up (too wide / too many states / no answer)
@@ -158,7 +162,7 @@ class FrontierDP {
     // mode 0: best path, value = length + bonus at both ends (ends distinct, at least one edge).
     //         If forced >= 0 that vertex must be one end (it gets no bonus unless bonus says so).
     // mode 1: best cycle.
-    FrontierDP(const Graph& g, const FrontierOrder& ord, Control& ctl, long long budget, long long layer_cap)
+    FrontierDPT(const Graph& g, const FrontierOrder& ord, Control& ctl, long long budget, long long layer_cap)
         : g(g), ord(ord), ctl(ctl), budget(budget), layer_cap(layer_cap) {}
 
     // lb >= 0: only answers longer than lb matter (a solution of length lb is known to the caller).
@@ -380,10 +384,15 @@ class FrontierDP {
     int rank_max_points = 16;  // groups whose matchings span more points are left alone (vectors too long)
 
    private:
-    struct Key {
-        uint64_t lo = 0, hi = 0;
-        bool operator==(const Key& o) const { return lo == o.lo && hi == o.hi; }
+    struct Key1 {
+        uint64_t lo = 0;
+        bool operator==(const Key1& o) const { return lo == o.lo; }
     };
+    struct Key2 {
+        uint64_t lo = 0, hi = 0;
+        bool operator==(const Key2& o) const { return lo == o.lo && hi == o.hi; }
+    };
+    using Key = std::conditional_t<KW == 1, Key1, Key2>;
     struct State {
         Key k;
         double v;
@@ -421,6 +430,13 @@ class FrontierDP {
     bool best_took = false;
 
     static void decode(const Key& k, int W, uint8_t* c, int& t, int& f) {
+        if constexpr (KW == 1) {
+            uint64_t x = k.lo;
+            for (int s = 0; s < W; ++s, x >>= 5) c[s] = (uint8_t)(x & 31);
+            t = (int)((k.lo >> 60) & 3);
+            f = (int)((k.lo >> 62) & 1);
+            return;
+        } else {
         for (int s = 0; s < W; ++s) {
             int bit = s * 5;
             uint64_t x = bit < 64 ? (k.lo >> bit) | (bit > 59 ? (k.hi << (64 - bit)) : 0) : (k.hi >> (bit - 64));
@@ -428,9 +444,16 @@ class FrontierDP {
         }
         t = (int)((k.hi >> 60) & 3);
         f = (int)((k.hi >> 62) & 1);
+        }
     }
     static Key encode(const uint8_t* c, int W, int t, int f) {
         Key k;
+        if constexpr (KW == 1) {
+            uint64_t x = 0;
+            for (int s = W; s-- > 0;) x = (x << 5) | c[s];
+            k.lo = x | (uint64_t)t << 60 | (uint64_t)f << 62;
+            return k;
+        } else {
         for (int s = 0; s < W; ++s) {
             int bit = s * 5;
             uint64_t x = c[s];
@@ -442,10 +465,16 @@ class FrontierDP {
         }
         k.hi |= (uint64_t)t << 60 | (uint64_t)f << 62;
         return k;
+        }
     }
     static size_t hash(const Key& k) {
-        uint64_t h = k.lo * 0x9E3779B97F4A7C15ull ^ (k.hi + 0x632BE59BD9B4E019ull) * 0xC2B2AE3D27D4EB4Full;
-        return (size_t)(h ^ (h >> 29));
+        if constexpr (KW == 1) {
+            uint64_t h = k.lo * 0x9E3779B97F4A7C15ull;
+            return (size_t)(h ^ (h >> 29));
+        } else {
+            uint64_t h = k.lo * 0x9E3779B97F4A7C15ull ^ (k.hi + 0x632BE59BD9B4E019ull) * 0xC2B2AE3D27D4EB4Full;
+            return (size_t)(h ^ (h >> 29));
+        }
     }
     static bool only_closed(const uint8_t* d, int W) {  // no other open part anywhere on the frontier
         for (int s = 0; s < W; ++s)
@@ -701,5 +730,7 @@ class FrontierDP {
         return s;
     }
 };
+
+using FrontierDP = FrontierDPT<2>;
 
 }  // namespace lp
