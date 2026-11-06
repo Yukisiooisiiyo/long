@@ -10,6 +10,7 @@
 // exceeds a budget it gives up and the caller falls back to branch and bound.
 #pragma once
 #include <algorithm>
+#include <bit>
 #include <climits>
 #include <cstdint>
 #include <cstring>
@@ -654,7 +655,7 @@ class FrontierDPT {
                 size_t hb = SIZE_MAX;
                 for (size_t w = words; w-- > 0;)
                     if (vec[w]) {
-                        hb = w * 64 + 63 - __builtin_clzll(vec[w]);
+                        hb = w * 64 + 63 - static_cast<size_t>(std::countl_zero(vec[w]));
                         break;
                     }
                 if (hb == SIZE_MAX) {
