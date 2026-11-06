@@ -53,6 +53,8 @@ struct Config {
     long long lp_max_m = 20000;  // and edges (the simplex keeps a dense table)
     int fdp_lp_width = 14;       // with the revised simplex, blocks wider than this go to the LP first
     bool lp_blossom = true;      // blossom cuts in the LP
+    int lp_order = 1;            // LP node order: 0 depth-first, 1 best-first with plunging
+    double lp_plunge = 5e-4;     // plunge while the bound is within this fraction of the best open bound
     bool lp_revised = true;      // revised simplex (sparse, product-form inverse) instead of the dense table
     int lp_cuts_round = 20;      // most violated cuts added per separation round
     bool lp_light_init = true;   // no beam search before the LP
@@ -325,7 +327,7 @@ class Solver {
         inc.offer(best.len, best.path);
         // dense graphs: LP branch and cut first; if it proves the answer, done
         if (use_lp(g)) {
-            auto r = run_lp_bnc(cfg.lp_revised, g, nullptr, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom);
+            auto r = run_lp_bnc(cfg.lp_revised, g, nullptr, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom, cfg.lp_order, cfg.lp_plunge);
             st.lp_nodes += r.nodes, st.lp_runs += 1;
             if (ctl.stop) throw Timeout{};
             if (r.proved) {
@@ -396,7 +398,7 @@ class Solver {
             }
             std::vector<std::pair<double, int>> firsts;
             for (auto [v, e] : gs.adj[s]) firsts.push_back({gs.edges[e].w - lr.lam[v], v});
-            std::sort(firsts.rbegin(), firsts.rend());
+            std::stable_sort(firsts.rbegin(), firsts.rend());
             for (auto [key, v] : firsts) {
                 if (ctl.stop) return;
                 explore_cycle(g, s, {s, v}, g.weight(s, v), lr.lam, 1, inc, nodes);
@@ -471,7 +473,7 @@ class Solver {
             if (done) return;
             std::vector<std::pair<double, int>> kids;
             for (auto [x, e] : gp.adj[vk]) kids.push_back({gp.edges[e].w - lv.lam[x], x});
-            std::sort(kids.rbegin(), kids.rend());
+            std::stable_sort(kids.rbegin(), kids.rend());
             for (auto [key, x] : kids) {
                 auto Q = P;
                 Q.push_back(x);
@@ -553,7 +555,7 @@ class Solver {
             std::vector<std::pair<double, int>> kids;
             for (auto [x, e] : gp.adj[vk])
                 if (x != s) kids.push_back({gp.edges[e].w - lv.lam[x], x});
-            std::sort(kids.rbegin(), kids.rend());
+            std::stable_sort(kids.rbegin(), kids.rend());
             for (auto [key, x] : kids) {
                 auto Q = P;
                 Q.push_back(x);
@@ -677,7 +679,7 @@ class Solver {
             for (int a : child_arts[b]) {
                 std::vector<std::pair<double, int>> vl;
                 for (int c : child_blocks[a]) vl.push_back({via[c].v, c});
-                std::sort(vl.begin(), vl.end(), [](auto& x, auto& y) { return x.first > y.first; });
+                std::stable_sort(vl.begin(), vl.end(), [](auto& x, auto& y) { return x.first > y.first; });
                 down[a] = vl[0];
                 if (vl.size() >= 2) {
                     int b1 = vl[0].second, b2 = vl[1].second;
@@ -780,7 +782,7 @@ class Solver {
                 {  // (1) + (2): best path with end bonuses or cycle, only if better than the answer so far
                     Incumbent inc;
                     inc.best.store(bestv);
-                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom);
+                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom, cfg.lp_order, cfg.lp_plunge);
                     st.lp_nodes += r.nodes, ++st.lp_runs;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved) {
@@ -810,7 +812,7 @@ class Solver {
                         double val = lg.edges[e].w + bonus[v];
                         inc.offer(val, std::vector<int>{pl, v});
                     }
-                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, pl, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom);
+                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, pl, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom, cfg.lp_order, cfg.lp_plunge);
                     st.lp_nodes += r.nodes, ++st.lp_runs;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved && !inc.path.empty()) {
@@ -872,7 +874,7 @@ class Solver {
                 {  // fixed-start beams from the largest bonuses
                     std::vector<int> ord(lg.n);
                     std::iota(ord.begin(), ord.end(), 0);
-                    std::sort(ord.begin(), ord.end(), [&](int a, int c) { return bonus[a] > bonus[c]; });
+                    std::stable_sort(ord.begin(), ord.end(), [&](int a, int c) { return bonus[a] > bonus[c]; });
                     for (int i = 0; i < std::min(lg.n, 8) && bonus[ord[i]] > 0; ++i) {
                         Sol bf = beam_from(lg, ord[i], bonus);
                         if (gt(bf.len, hs.len)) hs = bf;

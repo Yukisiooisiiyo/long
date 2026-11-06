@@ -193,7 +193,7 @@ inline std::pair<std::vector<long long>, Graph> parse(const std::string& text, d
             *scale = p10;
     }
     if (!exact && scale) *scale = 0;
-    std::sort(raw.begin(), raw.end(), [](const E3& x, const E3& y) { return x.u != y.u ? x.u < y.u : x.v < y.v; });
+    std::stable_sort(raw.begin(), raw.end(), [](const E3& x, const E3& y) { return x.u != y.u ? x.u < y.u : x.v < y.v; });
     std::vector<Edge> es;
     for (size_t i = 0; i < raw.size();) {
         size_t j = i;
@@ -222,7 +222,7 @@ inline std::vector<std::vector<int>> components(const Graph& g) {
                     st.push_back(v);
                 }
         }
-        std::sort(cur.begin(), cur.end());
+        std::stable_sort(cur.begin(), cur.end());
         out.push_back(cur);
     }
     return out;
@@ -304,7 +304,7 @@ inline double verify(const Graph& g, const std::vector<int>& p) {
     bool cyc = p.size() > 2 && p.front() == p.back();
     std::vector<int> body(p.begin(), cyc ? p.end() - 1 : p.end());
     std::vector<int> s = body;
-    std::sort(s.begin(), s.end());
+    std::stable_sort(s.begin(), s.end());
     if (std::adjacent_find(s.begin(), s.end()) != s.end()) throw std::runtime_error("repeated vertex");
     if (cyc && body.size() < 3) throw std::runtime_error("cycle too short");
     double L = 0;

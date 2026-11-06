@@ -13,6 +13,20 @@ struct Sol {
     double len = -1.0;
     std::vector<int> path;  // a cycle repeats its first vertex at the end
 };
+// Platform-independent random numbers and hashing. std::mt19937's output is fixed by the standard,
+// but std::uniform_*_distribution and std::hash are implementation-defined (GCC, Clang and MSVC give
+// different values), which would change the heuristic's path and hence the search on each platform.
+inline int rand_int(std::mt19937& r, int lo, int hi) {  // uniform in [lo, hi]
+    return lo + (int)(((uint64_t)r() * (uint64_t)(hi - lo + 1)) >> 32);
+}
+inline double rand01(std::mt19937& r) { return r() * (1.0 / 4294967296.0); }  // uniform in [0, 1)
+inline uint64_t mix64(uint64_t x) {  // splitmix64 finalizer
+    x += 0x9e3779b97f4a7c15ULL;
+    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+    return x ^ (x >> 31);
+}
+
 inline void take(Sol& a, const Sol& b) {
     if (gt(b.len, a.len)) a = b;
 }
@@ -42,7 +56,7 @@ inline Sol greedy(const Graph& g) {
     Sol best;
     std::vector<char> vis(g.n);
     for (int s = 0; s < g.n; ++s) {
-        std::fill(vis.begin(), vis.end(), 0);
+        std::fill(vis.begin(), vis.end(), char(0));
         std::vector<int> p{s};
         vis[s] = 1;
         double L = 0;
@@ -64,7 +78,7 @@ inline Sol greedy(const Graph& g) {
 inline std::vector<int> max_spanning_tree(const Graph& g) {
     std::vector<int> order(g.edges.size());
     std::iota(order.begin(), order.end(), 0);
-    std::sort(order.begin(), order.end(), [&](int a, int b) { return g.edges[a].w > g.edges[b].w; });
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return g.edges[a].w > g.edges[b].w; });
     DSU d(g.n);
     std::vector<int> tree;
     for (int i : order)
@@ -153,7 +167,7 @@ inline Sol fundamental_cycles(const Graph& g, int top_m = 5) {
         }
         cyc.push_back({L, i});
     }
-    std::sort(cyc.begin(), cyc.end(), [](auto& x, auto& y) { return x.first > y.first; });
+    std::stable_sort(cyc.begin(), cyc.end(), [](auto& x, auto& y) { return x.first > y.first; });
     Sol best;
     for (int k = 0; k < std::min<int>(top_m, (int)cyc.size()); ++k) {
         int i = cyc[k].second;
@@ -216,7 +230,7 @@ inline Sol beam_search(const Graph& g, int K = 32, double alpha = 0.3,
         beam.push_back({e.w + B(e.u) + B(e.v) + alpha * reach_sum(e.u, e.v, vis), e.w, {e.u, e.v}, vis});
     }
     auto bycore = [](const St& a, const St& b) { return a.score > b.score; };
-    std::sort(beam.begin(), beam.end(), bycore);
+    std::stable_sort(beam.begin(), beam.end(), bycore);
     if ((int)beam.size() > K) beam.resize(K);
     Sol best;
     auto val = [&](const St& s) { return s.len + B(s.path.front()) + B(s.path.back()); };
@@ -224,9 +238,9 @@ inline Sol beam_search(const Graph& g, int K = 32, double alpha = 0.3,
     while (!beam.empty()) {
         struct KeyH {
             size_t operator()(const std::pair<std::vector<uint64_t>, std::pair<int, int>>& k) const {
-                size_t h = std::hash<long long>()(((long long)k.second.first << 32) ^ k.second.second);
-                for (auto w : k.first) h ^= std::hash<uint64_t>()(w) + 0x9e3779b9 + (h << 6) + (h >> 2);
-                return h;
+                uint64_t h = mix64(((uint64_t)(uint32_t)k.second.first << 32) ^ (uint32_t)k.second.second);
+                for (auto w : k.first) h ^= mix64(w) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                return (size_t)h;
             }
         };
         std::unordered_map<std::pair<std::vector<uint64_t>, std::pair<int, int>>, size_t, KeyH> idx;
@@ -265,7 +279,7 @@ inline Sol beam_search(const Graph& g, int K = 32, double alpha = 0.3,
             }
         }
         if (cand.empty()) break;
-        std::sort(cand.begin(), cand.end(), bycore);
+        std::stable_sort(cand.begin(), cand.end(), bycore);
         if ((int)cand.size() > K) cand.resize(K);
         beam = std::move(cand);
         for (auto& s : beam) take(best, {val(s), s.path});
@@ -280,7 +294,7 @@ inline Sol local_search(const Graph& g, std::vector<int> p) {
     std::vector<char> vis(g.n);
     while (improved) {
         improved = false;
-        std::fill(vis.begin(), vis.end(), 0);
+        std::fill(vis.begin(), vis.end(), char(0));
         for (int x : cur.path) vis[x] = 1;
         auto& P = cur.path;
         for (size_t i = 0; i + 1 < P.size() && !improved; ++i) {
@@ -331,13 +345,13 @@ inline Sol ils(const Graph& g, std::vector<int> p, int iters = 30, unsigned seed
     for (int it = 0; it < iters; ++it) {
         if (curr.path.size() < 3) break;
         int m = (int)curr.path.size();
-        int k = std::uniform_int_distribution<int>(1, std::max(1, m / 3))(rng);
-        double r = std::uniform_real_distribution<double>(0, 1)(rng);
+        int k = rand_int(rng, 1, std::max(1, m / 3));
+        double r = rand01(rng);
         std::vector<int> q;
         if (r < 0.4) q.assign(curr.path.begin() + k, curr.path.end());
         else if (r < 0.8) q.assign(curr.path.begin(), curr.path.end() - k);
         else {
-            int i = std::uniform_int_distribution<int>(1, m - 2)(rng);
+            int i = rand_int(rng, 1, m - 2);
             if (i >= m - i) q.assign(curr.path.begin(), curr.path.begin() + i);
             else q.assign(curr.path.begin() + i, curr.path.end());
         }
@@ -373,8 +387,8 @@ inline Sol beam_from(const Graph& g, int x, const std::vector<double>& bonus, in
                 t.vis[v >> 6] |= 1ULL << (v & 63);
                 t.score = t.len + bonus[x] + bonus[v];
                 take(best, {t.score, t.path});
-                size_t h = (size_t)v * 1000003u;
-                for (auto w : t.vis) h ^= std::hash<uint64_t>()(w) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                uint64_t h = (uint64_t)v * 1000003u;
+                for (auto w : t.vis) h ^= mix64(w) + 0x9e3779b9 + (h << 6) + (h >> 2);
                 auto it = seen.find((long long)h);
                 if (it != seen.end() && cand[it->second].vis == t.vis && cand[it->second].path.back() == v) {
                     if (cand[it->second].len >= t.len) continue;
@@ -386,7 +400,7 @@ inline Sol beam_from(const Graph& g, int x, const std::vector<double>& bonus, in
             }
         }
         // keep the longest prefixes (the end bonus is only collected when the path stops)
-        std::sort(cand.begin(), cand.end(), [](const St& a, const St& b) { return a.len > b.len; });
+        std::stable_sort(cand.begin(), cand.end(), [](const St& a, const St& b) { return a.len > b.len; });
         if ((int)cand.size() > K) cand.resize(K);
         beam = std::move(cand);
     }
@@ -483,7 +497,7 @@ inline Sol improve_bonus(const Graph& g, std::vector<int> p, const std::vector<d
         bool improved = true;
         while (improved) {
             improved = false;
-            std::fill(vis.begin(), vis.end(), 0);
+            std::fill(vis.begin(), vis.end(), char(0));
             for (int x : q) vis[x] = 1;
             // extend an end: v -> x adds w(v,x) + b(x) - b(v)
             for (int end = 0; end < 2 && !improved; ++end) {
@@ -547,8 +561,8 @@ inline Sol improve_bonus(const Graph& g, std::vector<int> p, const std::vector<d
     for (int it = 0; it < iters; ++it) {
         int m = (int)curp.size();
         if (m < 3) break;
-        int k = std::uniform_int_distribution<int>(1, std::max(1, m / 3))(rng);
-        double r = std::uniform_real_distribution<double>(0, 1)(rng);
+        int k = rand_int(rng, 1, std::max(1, m / 3));
+        double r = rand01(rng);
         std::vector<int> q;
         if (r < 0.5) q.assign(curp.begin() + k, curp.end());
         else q.assign(curp.begin(), curp.end() - k);

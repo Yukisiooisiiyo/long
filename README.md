@@ -29,7 +29,7 @@ clang++ -std=c++20 -O3 -pthread -o longest src/main.cpp         # Mac
 cl /std:c++20 /O2 /EHsc /utf-8 src\main.cpp /Fe:longest.exe     # Windows（Developer Command Prompt for VS）
 ```
 
-動作確認済みの環境：Linux x86_64（GCC 13.3、CMake 3.28）。Windows・Mac は上の手順を想定していますが、実機では未確認です。
+動作確認済みの環境：Linux x86_64（GCC 13.3、CMake 3.28）、Windows 10（Visual Studio 2019 の MSVC 19.29、CMake 4.4）。Mac は上の手順を想定していますが、実機では未確認です。
 
 ## 使い方
 
@@ -89,12 +89,14 @@ python3 tests/check.py ./longest prototype_python 300 1                  # 総�
 REF_BIN=<別の版> python3 tests/check_fdp.py ./longest prototype_python 200 1  # 解き方ごとの極端な設定を総当たり・別の版と照合
 python3 tests/check_big.py ./longest <別の版>                             # 大きい入力を独立した方法と照合
 python3 tests/check_precision.py ./longest 400 1                         # 大きな値・桁数の混在を有理数の総当たりと照合
+python3 bench/determinism.py ./longest out.json --ref bench/results/determinism_ref.json  # 探索の道筋が基準（Linux）と同じか
 ```
 
 - 小さい入力は総当たりと、中くらいの入力は独立に書いた Python 試作（`prototype_python/`、設計段階の対照実験に使ったもの）と照合しています。
 - 解き方ごとに「その方法を全部のブロックに強制する」「わざと途中で諦めさせる」などの極端な設定を含めて照合しています。
 - 照合の総数は数万回で、不一致は0件です（内訳は [docs/BENCHMARKS.md](docs/BENCHMARKS.md)）。
 - 距離が普通の小数（小数6桁以内）なら整数にして計算するので、合計がどれだけ大きくても0.01の差を取りこぼしません。
+- 乱数・ハッシュ・並べ替えの実装差を自前の決まった処理で吸収しているので、どのコンパイラ・OSでも探索の道筋（ノード数など）が同じになります（`bench/determinism.py` で確認できます）。
 - 実行時にも、出力する前に経路が実在する路線をたどっていることと長さを検算し、合わなければ終了コード3で止まります。
 
 ## 速さ

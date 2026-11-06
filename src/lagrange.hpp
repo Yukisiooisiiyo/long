@@ -18,7 +18,7 @@ inline std::pair<double, std::vector<int>> lagr_forest(const Graph& g, const std
         double m = g.edges[i].w - lam[g.edges[i].u] - lam[g.edges[i].v];
         if (m > 0) mods.push_back({m, i});
     }
-    std::sort(mods.begin(), mods.end(), [](auto& a, auto& b) { return a.first > b.first; });
+    std::stable_sort(mods.begin(), mods.end(), [](auto& a, auto& b) { return a.first > b.first; });
     DSU d(g.n);
     double val = 0;
     std::vector<int> ch;
@@ -169,7 +169,7 @@ inline std::vector<std::vector<int>> forest_paths(const Graph& g, const std::vec
         for (int e : inc[u])
             if (keep[e]) es.push_back(e);
         if (es.size() > 2) {
-            std::sort(es.begin(), es.end(), [&](int a, int b) { return g.edges[a].w > g.edges[b].w; });
+            std::stable_sort(es.begin(), es.end(), [&](int a, int b) { return g.edges[a].w > g.edges[b].w; });
             for (size_t k = 2; k < es.size(); ++k) keep[es[k]] = 0;
         }
     }
@@ -197,7 +197,7 @@ inline std::vector<std::vector<int>> forest_paths(const Graph& g, const std::vec
         }
         out.push_back({L, p});
     }
-    std::sort(out.begin(), out.end(), [](auto& a, auto& b) { return a.first > b.first; });
+    std::stable_sort(out.begin(), out.end(), [](auto& a, auto& b) { return a.first > b.first; });
     std::vector<std::vector<int>> res;
     for (auto& [L, p] : out) res.push_back(p);
     return res;

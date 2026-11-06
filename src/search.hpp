@@ -148,7 +148,7 @@ struct SearchCtx {
             double m = e.w - lam[e.u] - lam[e.v];
             if (m > 0) mods.push_back({m, i});
         }
-        std::sort(mods.begin(), mods.end(), [](auto& a, auto& b) { return a.first > b.first; });
+        std::stable_sort(mods.begin(), mods.end(), [](auto& a, auto& b) { return a.first > b.first; });
     }
 };
 
@@ -349,7 +349,7 @@ class Searcher {
             }
         // sort the appended slice by key (descending)
         std::vector<std::pair<int, double>> slice(mv.begin() + mb, mv.end());
-        std::sort(tmp.begin(), tmp.end(), [](auto& a, auto& b) { return a.first > b.first; });
+        std::stable_sort(tmp.begin(), tmp.end(), [](auto& a, auto& b) { return a.first > b.first; });
         for (size_t i = 0; i < tmp.size(); ++i) mv[mb + i] = slice[tmp[i].second - mb];
         st.push_back({len, mb, (int)mv.size(), mb});
     }

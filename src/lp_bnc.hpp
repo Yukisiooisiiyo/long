@@ -4,8 +4,10 @@
 // by an edge worth that vertex's end bonus (0 when there is none). A cycle through z is a path whose
 // ends are z's two neighbours; a cycle avoiding z is a cycle of the graph. Variables x_e, y_v in
 // [0, 1]; degree rows x(delta(v)) = 2 y_v; generalized subtour cuts x(delta(S)) >= 2 (y_i + y_j - 1)
-// for i in S, j outside, separated with Gomory-Hu (Gusfield) min cuts. Branching on fractional
-// variables, depth first.
+// for i in S, j outside, separated with Gomory-Hu (Gusfield) min cuts; blossom cuts. Branching on
+// fractional variables. Nodes are taken best bound first, diving into the 1-branch while its bound
+// stays within a small fraction of the best open bound: depth first spent most of its time in a
+// wrong first branch when the incumbent was weak, and its node count swung with tie-breaking.
 //
 // Exactness does not depend on the simplex being right. A node is pruned only by a bound computed
 // from the final duals in the safe form  pi^T b + sum_j max over [l_j, u_j] of (c_j - pi^T a_j) x_j,
@@ -17,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <vector>
 
 #include "graph.hpp"
@@ -351,6 +354,8 @@ class LPBranchCutT {
         : g(g), bonus(bonus), forced(forced), inc(inc), ctl(ctl) {}
 
     long long node_cap = 3000;
+    int order = 1;         // node order: 0 depth first, 1 best first with plunging
+    double plunge = 5e-4;  // dive while the bound is within this fraction of the best open bound
     int cuts_per_round = 0;   // 0: all violated cuts found
     int cut_cap = 20000;  // live cuts; inactive ones are purged
 
@@ -382,7 +387,8 @@ class LPBranchCutT {
             lp.set_bounds(ne + forced, 1.0, 1.0);
         }
         // (a one-vertex "path" z-v-z would need edge v-z twice, which its bound forbids)
-        dfs(res, 0);
+        if (order == 1) best_first(res);
+        else dfs(res);
         res.lps = lps;
         res.cuts = lp.R - N;
         res.proved = proved;
@@ -400,6 +406,7 @@ class LPBranchCutT {
     LPT lp;
     std::vector<std::vector<std::pair<int, double>>> cols;
     long long nodes = 0, lps = 0;
+    double last_ub = 0;  // bound of the node just solved
     bool proved = true;
 
     // drop inactive cuts (slack basic and positive) once there are many, to keep the tableau small
@@ -460,7 +467,7 @@ class LPBranchCutT {
                 else if (a != b2 && x[i] > 1e-9) out.push_back({x[i], i});
             }
             for (int v : H) ysum += y[v];
-            std::sort(out.rbegin(), out.rend());
+            std::stable_sort(out.rbegin(), out.rend());
             int k = 0;
             while (k < (int)out.size() && out[k].first > 0.5) ++k;
             if (k % 2 == 0) {  // make it odd: drop the weakest tooth or add the next edge, whichever is better
@@ -530,7 +537,7 @@ class LPBranchCutT {
             double need = 2 * (y[bi] + y[bj] - 1);
             if (fl[s] < need - 1e-6) cand.push_back({need - fl[s], s}), ij[s] = {bi, bj};
         }
-        std::sort(cand.rbegin(), cand.rend());
+        std::stable_sort(cand.rbegin(), cand.rend());
         std::vector<std::vector<char>> seen;
         for (auto [viol, s] : cand) {
             if (lp.R - N >= cut_cap || (cuts_per_round > 0 && added >= cuts_per_round)) break;
@@ -627,28 +634,29 @@ class LPBranchCutT {
         inc.offer(L, path);
     }
 
-    void dfs(Result& res, int depth) {
-        if (!proved) return;
+    // Solves the current node (cut rounds). Returns the branching variable, or -1 when the node
+    // is closed (bound not above the incumbent, infeasible, integral) or proving failed.
+    int process_node() {
         ctl.check();  // throws Timeout when the time limit is reached
         if (++nodes > node_cap) {
             proved = false;
-            return;
+            return -1;
         }
-        res.nodes = nodes;
         for (int round = 0;; ++round) {
             ++lps;
             int st = lp.solve();
             if (st == 2) {
                 proved = false;
-                return;
+                return -1;
             }
             if (st == 1) {
-                if (lp.farkas_ok(cols)) return;  // certified infeasible
+                if (lp.farkas_ok(cols)) return -1;  // certified infeasible
                 proved = false;
-                return;
+                return -1;
             }
             double ub = lp.safe_bound(cols);
-            if (!gt(ub, inc.get())) return;
+            if (!gt(ub, inc.get())) return -1;
+            last_ub = ub;
             purge();
             int added = (round < 50) ? separate() : 0;
             if (!added && blossoms && round < 50) added = separate_blossoms();
@@ -678,16 +686,74 @@ class LPBranchCutT {
                 // pick any fractional-looking variable is impossible: give up proving
                 proved = false;
             }
-            return;
+            return -1;
         }
+        return q;
+    }
+
+    void dfs(Result& res) {
+        if (!proved) return;
+        int q = process_node();
+        res.nodes = nodes;
+        if (q < 0) return;
         double lo = lp.l[q], hi = lp.u[q];
         for (double v : {1.0, 0.0}) {
             if (v < lo || v > hi) continue;
             lp.set_bounds(q, v, v);
-            dfs(res, depth + 1);
+            dfs(res);
             lp.set_bounds(q, lo, hi);
             if (!proved) return;
         }
+    }
+
+    // Best-first: always the open node with the highest bound (ties: the newest, as in a dive).
+    // Each node keeps its fixings; switching nodes resets the previous fixings to the root bounds.
+    void best_first(Result& res) {
+        struct Node {
+            double ub;
+            long long seq;
+            std::vector<std::pair<int, double>> fix;
+        };
+        auto worse = [](const Node& a, const Node& b) { return a.ub != b.ub ? a.ub < b.ub : a.seq < b.seq; };
+        std::vector<double> l0(S), u0(S);
+        for (int j = 0; j < S; ++j) l0[j] = lp.l[j], u0[j] = lp.u[j];
+        std::vector<Node> heap;
+        heap.push_back({std::numeric_limits<double>::infinity(), 0, {}});
+        long long seq = 0;
+        std::vector<int> cur;  // variables fixed for the node being solved
+        while (!heap.empty() && proved) {
+            std::pop_heap(heap.begin(), heap.end(), worse);
+            Node nd = std::move(heap.back());
+            heap.pop_back();
+            if (!gt(nd.ub, inc.get())) continue;
+            for (int j : cur) lp.set_bounds(j, l0[j], u0[j]);
+            cur.clear();
+            for (auto [j, v] : nd.fix) lp.set_bounds(j, v, v), cur.push_back(j);
+            // plunge: keep diving into the 1-branch while its bound stays close to the best open bound
+            for (;;) {
+                int q = process_node();
+                res.nodes = nodes;
+                if (!proved || q < 0) break;
+                double ub = last_ub;
+                bool dive = false;
+                if (plunge > 0) {
+                    double top = heap.empty() ? -std::numeric_limits<double>::infinity() : heap.front().ub;
+                    dive = ub >= top - plunge * std::fabs(top);
+                }
+                for (double v : {0.0, 1.0}) {  // pushed 0 then 1: on equal bounds the 1-branch comes first
+                    if (v < lp.l[q] || v > lp.u[q]) continue;
+                    if (dive && v == 1.0) continue;
+                    Node ch{ub, ++seq, nd.fix};
+                    ch.fix.push_back({q, v});
+                    heap.push_back(std::move(ch));
+                    std::push_heap(heap.begin(), heap.end(), worse);
+                }
+                if (!dive || 1.0 < lp.l[q] || 1.0 > lp.u[q]) break;
+                lp.set_bounds(q, 1.0, 1.0), cur.push_back(q);
+                nd.fix.push_back({q, 1.0});
+            }
+        }
+        for (int j : cur) lp.set_bounds(j, l0[j], u0[j]);
     }
 };
 
@@ -695,11 +761,13 @@ using LPResult = LPBranchCutT<BoundedSimplex>::Result;
 
 // run the branch and cut with the dense-table simplex or the revised simplex
 inline LPResult run_lp_bnc(bool revised, const Graph& g, const std::vector<double>* bonus, int forced, Incumbent& inc,
-                           Control& ctl, long long node_cap, int cuts_round, bool blossoms) {
+                           Control& ctl, long long node_cap, int cuts_round, bool blossoms, int order, double plunge) {
     auto go = [&](auto& bc) {
         bc.node_cap = node_cap;
         bc.cuts_per_round = cuts_round;
         bc.blossoms = blossoms;
+        bc.order = order;
+        bc.plunge = plunge;
         auto r = bc.run();
         return LPResult{r.proved, r.nodes, r.lps, r.cuts};
     };

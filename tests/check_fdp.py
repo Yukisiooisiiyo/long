@@ -30,7 +30,10 @@ VARIANTS = [[], ON, ON + ["--t-dp", "0"], ON + ["--t-dp", "3"], ON + ["--t-dp", 
             # LP on every block that is not thin, with the revised and with the dense-table simplex
             ["--x", "fdp=0", "--t-dp", "0"], ["--x", "fdp=0", "--t-dp", "0", "--x", "lp_revised=0"],
             ["--x", "fdp=0", "--x", "lp_revised=0"], ["--x", "lp_nodes=3", "--t-dp", "0", "--x", "fdp=0"],
-            ["--x", "fdp=0", "--t-dp", "0", "--x", "lp_blossom=0"], ["--x", "fdp=0", "--x", "lp_cuts_round=1"]]
+            ["--x", "fdp=0", "--t-dp", "0", "--x", "lp_blossom=0"], ["--x", "fdp=0", "--x", "lp_cuts_round=1"],
+            # LP node order: depth first, best first without plunging, always plunging
+            ["--x", "fdp=0", "--t-dp", "0", "--x", "lp_order=0"], ["--x", "fdp=0", "--t-dp", "0", "--x", "lp_plunge_e4=0"],
+            ["--x", "fdp=0", "--x", "lp_plunge_e4=100000"], ["--x", "fdp=0", "--x", "lp_nodes=3", "--x", "lp_plunge_e4=0"]]
 rng = random.Random(SEED)
 bad = checks = 0
 for t in range(TRIALS):

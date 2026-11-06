@@ -39,7 +39,7 @@ inline FrontierOrder frontier_from_vertex_order(const Graph& g, const std::vecto
     FrontierOrder o;
     o.edges.resize(g.edges.size());
     std::iota(o.edges.begin(), o.edges.end(), 0);
-    std::sort(o.edges.begin(), o.edges.end(), [&](int a, int b) {
+    std::stable_sort(o.edges.begin(), o.edges.end(), [&](int a, int b) {
         const Edge &x = g.edges[a], &y = g.edges[b];
         int xa = std::max(pos[x.u], pos[x.v]), ya = std::max(pos[y.u], pos[y.v]);
         if (xa != ya) return xa < ya;
@@ -233,7 +233,7 @@ class FrontierDPT {
                     double r = E.w - lam_[E.u] - lam_[E.v];
                     if (r > 0) red.push_back({r, i});
                 }
-                std::sort(red.rbegin(), red.rend());
+                std::stable_sort(red.rbegin(), red.rend());
                 DSU d(g.n);
                 for (int i = 0; i < m; ++i) {  // forest over edges with index > i
                     std::iota(d.p.begin(), d.p.end(), 0);
@@ -246,10 +246,10 @@ class FrontierDPT {
                     }
                     lforest_[i] = val + (mode_ == 1 ? extra : 0.0);
                 }
-                std::vector<double> byfirst(m + 1, 0.0);
+                std::vector<double> lam_first(m + 1, 0.0);
                 for (int v = 0; v < g.n; ++v)
-                    if (first[v] >= 0) byfirst[first[v]] += 2 * lam_[v];
-                for (int i = m - 1; i >= 0; --i) lfut_[i] = lfut_[i + 1] + (i + 1 < m ? byfirst[i + 1] : 0.0);
+                    if (first[v] >= 0) lam_first[first[v]] += 2 * lam_[v];
+                for (int i = m - 1; i >= 0; --i) lfut_[i] = lfut_[i + 1] + (i + 1 < m ? lam_first[i + 1] : 0.0);
             }
             maxb_ = 0;
             if (mode_ == 0 && bonus_)
@@ -267,7 +267,7 @@ class FrontierDPT {
             for (int x : {E.u, E.v})
                 if (last[x] == i && std::find(leave.begin(), leave.end(), slot[x]) == leave.end())
                     leave.push_back(slot[x]);
-            std::sort(leave.rbegin(), leave.rend());
+            std::stable_sort(leave.rbegin(), leave.rend());
             int W = (int)F.size();
             // new slot numbering after the leaving vertices are removed
             std::vector<int> remap(W);
@@ -339,9 +339,12 @@ class FrontierDPT {
             if (beam > 0 && (long long)nxt.size() > beam) {  // keep the most promising states only
                 std::vector<int> id(nxt.size());
                 std::iota(id.begin(), id.end(), 0);
-                std::nth_element(id.begin(), id.begin() + beam, id.end(),
-                                 [&](int x, int y) { return nxt[x].pr > nxt[y].pr; });
+                // total order (ties by index) and a sorted result: the same states on every platform
+                std::nth_element(id.begin(), id.begin() + beam, id.end(), [&](int x, int y) {
+                    return nxt[x].pr != nxt[y].pr ? nxt[x].pr > nxt[y].pr : x < y;
+                });
                 id.resize(beam);
+                std::sort(id.begin(), id.end());
                 std::vector<State> n2;
                 std::vector<uint32_t> b2;
                 n2.reserve(beam), b2.reserve(beam);
@@ -601,7 +604,7 @@ class FrontierDPT {
             for (int i = 0; i < (int)pts.size(); ++i) pidx[pts[i]] = i;
             int zi = zend ? P - 1 : -1;
             size_t words = (((size_t)1 << (P - 1)) + 63) / 64;
-            std::sort(gr.ids.begin(), gr.ids.end(), [&](int a, int b) { return nxt[a].v > nxt[b].v; });
+            std::sort(gr.ids.begin(), gr.ids.end(), [&](int a, int b) { return nxt[a].v != nxt[b].v ? nxt[a].v > nxt[b].v : a < b; });
             std::vector<std::vector<uint64_t>> basis;  // rows, each with its pivot = highest set bit
             std::vector<size_t> piv;
             std::vector<uint64_t> vec(words);

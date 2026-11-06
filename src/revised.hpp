@@ -218,7 +218,7 @@ class RevisedSimplex {
             } else
                 structs.push_back(j);
         }
-        std::sort(structs.begin(), structs.end(), [&](int a, int b2) { return colA[a].size() < colA[b2].size(); });
+        std::stable_sort(structs.begin(), structs.end(), [&](int a, int b2) { return colA[a].size() < colA[b2].size(); });
         std::vector<double> v;
         for (int j : structs) {
             column(j, v);
