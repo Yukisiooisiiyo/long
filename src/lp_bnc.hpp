@@ -20,6 +20,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <thread>
 #include <vector>
 
 #include "graph.hpp"
@@ -356,6 +357,7 @@ class LPBranchCutT {
     long long node_cap = 3000;
     int order = 1;         // node order: 0 depth first, 1 best first with plunging
     double plunge = 5e-4;  // dive while the bound is within this fraction of the best open bound
+    std::atomic<bool>* race_stop = nullptr;  // set by the other racer when it has finished
     int cuts_per_round = 0;   // 0: all violated cuts found
     int cut_cap = 20000;  // live cuts; inactive ones are purged
 
@@ -489,10 +491,10 @@ class LPBranchCutT {
         }
         return added;
     }
-  public:
+   public:
     bool blossoms = false;
     long long blossom_cuts = 0;
-  private:
+   private:
 
     int separate() {
         int m = ne + n;
@@ -636,8 +638,25 @@ class LPBranchCutT {
 
     // Solves the current node (cut rounds). Returns the branching variable, or -1 when the node
     // is closed (bound not above the incumbent, infeasible, integral) or proving failed.
+    // the branching variable among [lo, hi): the first fractional y, or the most fractional x
+    int pick(int lo, int hi) const {
+        int q = -1;
+        double best = 1e-6;
+        for (int j = lo; j < hi; ++j) {
+            double x = lp.xval(j), f = std::min(x, 1 - x);
+            if (f <= 1e-6) continue;
+            if (lo == ne + n) return j;
+            if (f > best) best = f, q = j;
+        }
+        return q;
+    }
+
     int process_node() {
         ctl.check();  // throws Timeout when the time limit is reached
+        if (race_stop && race_stop->load(std::memory_order_relaxed)) {
+            proved = false;
+            return -1;
+        }
         if (++nodes > node_cap) {
             proved = false;
             return -1;
@@ -663,20 +682,10 @@ class LPBranchCutT {
             if (added) continue;
             break;
         }
-        // branching variable: the most fractional (y first: whether a vertex is used)
-        int m = ne + n, q = -1;
-        double bestf = 1e-6;
-        for (int j = m; j < S && q < 0; ++j) {
-            double x = lp.xval(j), f = std::min(x, 1 - x);
-            if (f > bestf) bestf = f, q = j;
-        }
-        if (q < 0) {
-            bestf = 1e-6;
-            for (int j = 0; j < m; ++j) {
-                double x = lp.xval(j), f = std::min(x, 1 - x);
-                if (f > bestf) bestf = f, q = j;
-            }
-        }
+        // branching variable (y first: whether a vertex is used)
+        int m = ne + n;
+        int q = pick(m, S);
+        if (q < 0) q = pick(0, m);
         if (q < 0) {
             take_integral();
             // the bound above was not beaten by more than tolerance only if this point is the answer;
@@ -759,24 +768,63 @@ class LPBranchCutT {
 
 using LPResult = LPBranchCutT<BoundedSimplex>::Result;
 
-// run the branch and cut with the dense-table simplex or the revised simplex
+struct LPOptions {
+    long long node_cap = 3000;
+    int cuts_round = 20;
+    bool blossoms = true, race = false;
+    int order = 1;
+    double plunge = 5e-4;
+};
+
+inline std::atomic<long long> g_race_dfs_won{0};  // statistics: races won by the depth-first side
+
+// run the branch and cut with the dense-table simplex or the revised simplex; with `race`, depth
+// first and best first run in two threads on the same incumbent and the first proof wins
 inline LPResult run_lp_bnc(bool revised, const Graph& g, const std::vector<double>* bonus, int forced, Incumbent& inc,
-                           Control& ctl, long long node_cap, int cuts_round, bool blossoms, int order, double plunge) {
-    auto go = [&](auto& bc) {
-        bc.node_cap = node_cap;
-        bc.cuts_per_round = cuts_round;
-        bc.blossoms = blossoms;
+                           Control& ctl, const LPOptions& o) {
+    auto setup = [&](auto& bc, int order) {
+        bc.node_cap = o.node_cap;
+        bc.cuts_per_round = o.cuts_round;
+        bc.blossoms = o.blossoms;
         bc.order = order;
-        bc.plunge = plunge;
-        auto r = bc.run();
-        return LPResult{r.proved, r.nodes, r.lps, r.cuts};
+        bc.plunge = o.plunge;
     };
+    auto finish = [](auto&, const auto& r) { return LPResult{r.proved, r.nodes, r.lps, r.cuts}; };
+    if (o.race && revised) {
+        LPBranchCutT<RevisedSimplex> a(g, bonus, forced, inc, ctl), b(g, bonus, forced, inc, ctl);
+        setup(a, 0), setup(b, 1);
+        std::atomic<bool> stop_a{false}, stop_b{false};
+        a.race_stop = &stop_a, b.race_stop = &stop_b;
+        typename LPBranchCutT<RevisedSimplex>::Result ra, rb;
+        bool to_a = false, to_b = false;
+        auto runner = [&](auto& bc, auto& r, std::atomic<bool>& other, bool& to) {
+            try {
+                r = bc.run();
+            } catch (Timeout&) {
+                to = true;
+            }
+            if (r.proved) other.store(true);
+        };
+        std::thread ta([&] { runner(a, ra, stop_b, to_a); });
+        runner(b, rb, stop_a, to_b);
+        ta.join();
+        if (to_a || to_b || ctl.stop) throw Timeout{};
+        if (ra.proved) {
+            ++g_race_dfs_won;
+            return finish(a, ra);
+        }
+        return finish(b, rb);
+    }
     if (revised) {
         LPBranchCutT<RevisedSimplex> bc(g, bonus, forced, inc, ctl);
-        return go(bc);
+        setup(bc, o.order);
+        auto r = bc.run();
+        return finish(bc, r);
     }
     LPBranchCutT<BoundedSimplex> bc(g, bonus, forced, inc, ctl);
-    return go(bc);
+    setup(bc, o.order);
+    auto r = bc.run();
+    return finish(bc, r);
 }
 
 }  // namespace lp

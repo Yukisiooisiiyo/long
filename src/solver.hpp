@@ -54,6 +54,7 @@ struct Config {
     int fdp_lp_width = 14;       // with the revised simplex, blocks wider than this go to the LP first
     bool lp_blossom = true;      // blossom cuts in the LP
     int lp_order = 1;            // LP node order: 0 depth-first, 1 best-first with plunging
+    bool lp_race = true;         // depth-first and best-first in two threads, the first proof wins
     double lp_plunge = 5e-4;     // plunge while the bound is within this fraction of the best open bound
     bool lp_revised = true;      // revised simplex (sparse, product-form inverse) instead of the dense table
     int lp_cuts_round = 20;      // most violated cuts added per separation round
@@ -141,6 +142,13 @@ class Solver {
             for (int t = 0; t < T; ++t) th.emplace_back(worker, t);
             for (auto& x : th) x.join();
         }
+    }
+
+    LPOptions lp_opts() const {
+        LPOptions o;
+        o.node_cap = cfg.lp_nodes, o.cuts_round = cfg.lp_cuts_round, o.blossoms = cfg.lp_blossom;
+        o.race = cfg.lp_race && cfg.threads >= 2, o.order = cfg.lp_order, o.plunge = cfg.lp_plunge;
+        return o;
     }
 
     // ------------------------------------------------------------ initial solution portfolio
@@ -327,7 +335,7 @@ class Solver {
         inc.offer(best.len, best.path);
         // dense graphs: LP branch and cut first; if it proves the answer, done
         if (use_lp(g)) {
-            auto r = run_lp_bnc(cfg.lp_revised, g, nullptr, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom, cfg.lp_order, cfg.lp_plunge);
+            auto r = run_lp_bnc(cfg.lp_revised, g, nullptr, -1, inc, ctl, lp_opts());
             st.lp_nodes += r.nodes, st.lp_runs += 1;
             if (ctl.stop) throw Timeout{};
             if (r.proved) {
@@ -782,7 +790,7 @@ class Solver {
                 {  // (1) + (2): best path with end bonuses or cycle, only if better than the answer so far
                     Incumbent inc;
                     inc.best.store(bestv);
-                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, -1, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom, cfg.lp_order, cfg.lp_plunge);
+                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, -1, inc, ctl, lp_opts());
                     st.lp_nodes += r.nodes, ++st.lp_runs;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved) {
@@ -812,7 +820,7 @@ class Solver {
                         double val = lg.edges[e].w + bonus[v];
                         inc.offer(val, std::vector<int>{pl, v});
                     }
-                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, pl, inc, ctl, cfg.lp_nodes, cfg.lp_cuts_round, cfg.lp_blossom, cfg.lp_order, cfg.lp_plunge);
+                    auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, pl, inc, ctl, lp_opts());
                     st.lp_nodes += r.nodes, ++st.lp_runs;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved && !inc.path.empty()) {
