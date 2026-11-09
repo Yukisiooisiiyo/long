@@ -55,6 +55,7 @@ struct Config {
     bool lp_blossom = true;      // blossom cuts in the LP
     int lp_order = 1;            // LP node order: 0 depth-first, 1 best-first with plunging
     bool lp_race = true;         // depth-first and best-first in two threads, the first proof wins
+    bool lp_contract = true;     // contract degree-2 chains inside the LP
     double lp_plunge = 5e-4;     // plunge while the bound is within this fraction of the best open bound
     bool lp_revised = true;      // revised simplex (sparse, product-form inverse) instead of the dense table
     int lp_cuts_round = 20;      // most violated cuts added per separation round
@@ -75,7 +76,7 @@ struct Stats {
     int threads_used = 1;
     int fdp_blocks = 0, fdp_width = 0, fdp_fallback = 0;
     long long tasks_skipped = 0;
-    long long lp_nodes = 0, lp_runs = 0, lp_fallback = 0;
+    long long lp_nodes = 0, lp_runs = 0, lp_fallback = 0, lp_chains = 0;
     long long fdp_states = 0;
 };
 
@@ -147,7 +148,7 @@ class Solver {
     LPOptions lp_opts() const {
         LPOptions o;
         o.node_cap = cfg.lp_nodes, o.cuts_round = cfg.lp_cuts_round, o.blossoms = cfg.lp_blossom;
-        o.race = cfg.lp_race && cfg.threads >= 2, o.order = cfg.lp_order, o.plunge = cfg.lp_plunge;
+        o.race = cfg.lp_race && cfg.threads >= 2, o.order = cfg.lp_order, o.plunge = cfg.lp_plunge, o.contract = cfg.lp_contract;
         return o;
     }
 
@@ -235,8 +236,15 @@ class Solver {
     }
     // LP branch and cut for blocks the frontier DP does not take: up to lp_max_n vertices and at
     // least lp_min_ratio edges per vertex
+    // size of the LP after its chain contraction: the vertices of degree other than 2
+    int lp_size(const Graph& g) const {
+        if (!cfg.lp_contract) return g.n;
+        int k = 0;
+        for (int v = 0; v < g.n; ++v) k += g.adj[v].size() != 2;
+        return std::max(k, 1);
+    }
     bool use_lp(const Graph& g) const {
-        return cfg.lp_bnc && g.n <= cfg.lp_max_n && (long long)g.edges.size() <= cfg.lp_max_m &&
+        return cfg.lp_bnc && lp_size(g) <= cfg.lp_max_n && (long long)g.edges.size() <= cfg.lp_max_m &&
                (double)g.edges.size() >= cfg.lp_min_ratio * g.n;
     }
     bool use_fdp(const Graph& g, FrontierOrder& o) {
@@ -336,7 +344,7 @@ class Solver {
         // dense graphs: LP branch and cut first; if it proves the answer, done
         if (use_lp(g)) {
             auto r = run_lp_bnc(cfg.lp_revised, g, nullptr, -1, inc, ctl, lp_opts());
-            st.lp_nodes += r.nodes, st.lp_runs += 1;
+            st.lp_nodes += r.nodes, st.lp_runs += 1, st.lp_chains += r.chains;
             if (ctl.stop) throw Timeout{};
             if (r.proved) {
                 offer_global({inc.get(), inc.path}, to_global);
@@ -791,7 +799,7 @@ class Solver {
                     Incumbent inc;
                     inc.best.store(bestv);
                     auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, -1, inc, ctl, lp_opts());
-                    st.lp_nodes += r.nodes, ++st.lp_runs;
+                    st.lp_nodes += r.nodes, ++st.lp_runs, st.lp_chains += r.chains;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved) {
                         done_top = true;
@@ -821,7 +829,7 @@ class Solver {
                         inc.offer(val, std::vector<int>{pl, v});
                     }
                     auto r = run_lp_bnc(cfg.lp_revised, lg, &bonus, pl, inc, ctl, lp_opts());
-                    st.lp_nodes += r.nodes, ++st.lp_runs;
+                    st.lp_nodes += r.nodes, ++st.lp_runs, st.lp_chains += r.chains;
                     if (ctl.stop) throw Timeout{};
                     if (r.proved && !inc.path.empty()) {
                         done_via = true;

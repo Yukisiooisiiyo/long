@@ -110,6 +110,7 @@ int main(int argc, char** argv) {
                 else if (k == "lp_blossom") cfg.lp_blossom = v;
                 else if (k == "lp_order") cfg.lp_order = (int)v;
                 else if (k == "lp_race") cfg.lp_race = v;
+                else if (k == "lp_contract") cfg.lp_contract = v;
                 else if (k == "lp_plunge_e4") cfg.lp_plunge = v * 1e-4;
                 else if (k == "fdp_lp_width") cfg.fdp_lp_width = (int)v;
                 else if (k == "lp_min_ratio10") cfg.lp_min_ratio = v / 10.0;
@@ -186,7 +187,7 @@ int main(int argc, char** argv) {
            << " lagr_off=" << s.lagr_off << " proved_at_root=" << s.proved_root
            << " threads=" << s.threads_used << " fdp_blocks=" << s.fdp_blocks << " fdp_width=" << s.fdp_width
            << " fdp_states=" << s.fdp_states << " fdp_fallback=" << s.fdp_fallback << " tasks_skipped=" << s.tasks_skipped << " lp_runs=" << s.lp_runs << " lp_nodes=" << s.lp_nodes
-           << " lp_fallback=" << s.lp_fallback << " race_dfs_won=" << lp::g_race_dfs_won.load() << "\n";
+           << " lp_fallback=" << s.lp_fallback << " lp_chains=" << s.lp_chains << " race_dfs_won=" << lp::g_race_dfs_won.load() << "\n";
         std::cerr << os.str();
     }
     return 0;

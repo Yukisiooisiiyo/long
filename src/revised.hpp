@@ -24,7 +24,7 @@ class RevisedSimplex {
     std::vector<int> basic, pos, idcol;
     std::vector<double> xn;
     std::vector<std::vector<std::pair<int, double>>> colA;  // every column, identity columns too
-    long long iters = 0, iter_cap = 200000;
+    long long iters = 0, iter_cap = 200000;  // cap per solve() call (pivots), scaled with the size in init
     Control* ctl = nullptr;
     int infeasible_row = -1;
     int refactor_every = 64;
@@ -33,6 +33,7 @@ class RevisedSimplex {
     void init(int nstruct, const std::vector<double>& cost) {
         S = C = nstruct;
         c = cost;
+        iter_cap = std::max<long long>(200000, 100LL * C);
         l.assign(C, 0.0), u.assign(C, 1.0), xn.assign(C, 0.0), pos.assign(C, -1);
         colA.assign(C, {});
         d = c;
@@ -104,7 +105,9 @@ class RevisedSimplex {
         return rowmap;
     }
 
+    long long iter_start = 0;
     int solve() {
+        iter_start = iters;
         for (;;) {
             if (dirty && !refactor()) return 2;
             if (xdirty) recompute_x();
@@ -305,7 +308,7 @@ class RevisedSimplex {
     int dual() {
         std::vector<double> ar, aq;
         for (;;) {
-            if (iters > iter_cap) return 2;
+            if (iters - iter_start > iter_cap) return 2;
             if (dirty) return 4;
             int r = -1;
             double worst = kTol, val = 0;
@@ -354,7 +357,7 @@ class RevisedSimplex {
         std::vector<double> ar, aq;
         int degenerate = 0;
         for (;;) {
-            if (iters > iter_cap) return 2;
+            if (iters - iter_start > iter_cap) return 2;
             if (dirty) return 4;
             bool bland = degenerate > 50;
             int q = -1;

@@ -48,12 +48,13 @@ class BoundedSimplex {
     std::vector<double> xn;              // value of nonbasic columns (at a bound)
     std::vector<int> idcol;              // row -> its identity column (slack / artificial)
     std::vector<std::vector<std::pair<int, double>>> rowsA;  // original rows over structural columns
-    long long iters = 0, iter_cap = 200000;
+    long long iters = 0, iter_cap = 200000;  // cap per solve() call (pivots), scaled with the size in init
     Control* ctl = nullptr;  // time limit: checked every 64 pivots
 
     void init(int nstruct, const std::vector<double>& cost) {
         S = C = nstruct;
         c = cost;
+        iter_cap = std::max<long long>(200000, 100LL * C);
         l.assign(C, 0.0), u.assign(C, 1.0);
         xn.assign(C, 0.0);
         pos.assign(C, -1);
@@ -154,7 +155,9 @@ class BoundedSimplex {
     }
 
     // returns 0 optimal, 1 infeasible (candidate; check with farkas_ok), 2 iteration limit
+    long long iter_start = 0;
     int solve() {
+        iter_start = iters;
         // dual phase first if some basic variable violates its bounds, then primal
         for (;;) {
             int st = dual();
@@ -247,7 +250,7 @@ class BoundedSimplex {
 
     int dual() {
         for (;;) {
-            if (iters > iter_cap) return 2;
+            if (iters - iter_start > iter_cap) return 2;
             int r = -1;
             double worst = kTol, val = 0;
             basic_values(xb_);
@@ -288,7 +291,7 @@ class BoundedSimplex {
     int primal() {
         int degenerate = 0;
         for (;;) {
-            if (iters > iter_cap) return 2;
+            if (iters - iter_start > iter_cap) return 2;
             bool bland = degenerate > 50;
             int q = -1;
             double bestd = kTol;
@@ -347,7 +350,7 @@ class LPBranchCutT {
    public:
     struct Result {
         bool proved = false;  // true: no answer above `inc` exists beyond what was offered
-        long long nodes = 0, lps = 0, cuts = 0;
+        long long nodes = 0, lps = 0, cuts = 0, chains = 0;
     };
 
     // bonus may be null; forced >= 0: the path must have that vertex as an end (no cycles then)
@@ -357,42 +360,114 @@ class LPBranchCutT {
     long long node_cap = 3000;
     int order = 1;         // node order: 0 depth first, 1 best first with plunging
     double plunge = 5e-4;  // dive while the bound is within this fraction of the best open bound
+    bool contract = true;  // contract degree-2 chains before building the LP
     std::atomic<bool>* race_stop = nullptr;  // set by the other racer when it has finished
     int cuts_per_round = 0;   // 0: all violated cuts found
     int cut_cap = 20000;  // live cuts; inactive ones are purged
 
     Result run() {
         Result res;
-        n = g.n;
+        // ---- contraction of degree-2 chains
+        std::vector<int> deg(g.n, 0);
+        for (auto& e : g.edges) ++deg[e.u], ++deg[e.v];
+        auto fixed = [&](int v) { return !contract || deg[v] != 2 || v == forced || (bonus && (*bonus)[v] > 0); };
+        std::vector<int> cmap(g.n, -1);
+        corig.clear();
+        for (int v = 0; v < g.n; ++v)
+            if (fixed(v)) cmap[v] = (int)corig.size(), corig.push_back(v);
+        struct CE {
+            int u, v, orig, chain;
+            double w;
+        };
+        std::vector<CE> ce;
+        chains.clear();
+        bool ok = !corig.empty();
+        if (ok) {
+            std::vector<char> used(g.edges.size(), 0);
+            for (int a0 : corig) {
+                if (!ok) break;
+                for (auto [v, e] : g.adj[a0]) {
+                    if (used[e]) continue;
+                    used[e] = 1;
+                    std::vector<int> inner;
+                    std::vector<double> ws{g.edges[e].w};
+                    int cur = v;
+                    while (!fixed(cur)) {
+                        inner.push_back(cur);
+                        int e2 = -1;  // the other edge of a degree-2 vertex
+                        for (auto [x, ee] : g.adj[cur])
+                            if (!used[ee]) e2 = ee;
+                        if (e2 < 0) { ok = false; break; }
+                        used[e2] = 1;
+                        ws.push_back(g.edges[e2].w);
+                        int nx = g.edges[e2].u == cur ? g.edges[e2].v : g.edges[e2].u;
+                        cur = nx, e = e2;
+                    }
+                    if (!ok) break;
+                    if (inner.empty()) {
+                        ce.push_back({cmap[g.edges[e].u], cmap[g.edges[e].v], e, -1, ws[0]});  // the graph's orientation
+                    } else {
+                        if (cur == a0) { ok = false; break; }
+                        double W = 0;
+                        for (double w : ws) W += w;
+                        chains.push_back({cmap[a0], cmap[cur], inner, W, W - ws.back(), W - ws.front(), -1, -1, -1});
+                        ce.push_back({cmap[a0], cmap[cur], -1, (int)chains.size() - 1, W});
+                    }
+                }
+            }
+        }
+        if (!ok) {  // no contraction (a cycle block or an odd shape)
+            chains.clear(), ce.clear(), corig.clear();
+            for (int v = 0; v < g.n; ++v) cmap[v] = v, corig.push_back(v);
+            for (int i = 0; i < (int)g.edges.size(); ++i) ce.push_back({g.edges[i].u, g.edges[i].v, i, -1, g.edges[i].w});
+        }
+        // graph edges in their original order (the same LP as before on graphs without chains),
+        // chain edges after them
+        std::stable_sort(ce.begin(), ce.end(), [](const CE& x, const CE& y) {
+            if ((x.orig < 0) != (y.orig < 0)) return x.orig >= 0;
+            return x.orig >= 0 ? x.orig < y.orig : x.chain < y.chain;
+        });
+        n = (int)corig.size();
         N = n + 1;  // z = n
-        // columns: graph edges, z edges, y_v (v in 0..n)
-        ne = (int)g.edges.size();
-        int m = ne + n;
+        // columns: graph (and chain) edges, z edges per vertex, chain-end z edges, y_v (v in 0..n)
+        ne = (int)ce.size();
+        m = ne + n + 2 * (int)chains.size();
         S = m + N;
         std::vector<double> cost(S, 0.0);
-        eu.resize(m), ev.resize(m);
-        for (int i = 0; i < ne; ++i) eu[i] = g.edges[i].u, ev[i] = g.edges[i].v, cost[i] = g.edges[i].w;
-        for (int v = 0; v < n; ++v)
-            eu[ne + v] = v, ev[ne + v] = n, cost[ne + v] = (bonus && v != forced) ? (*bonus)[v] : 0.0;
+        eu.assign(m, 0), ev.assign(m, 0), col_orig.assign(m, -1), col_chain.assign(m, -1), zcol.assign(n, -1);
+        for (int i = 0; i < ne; ++i) {
+            eu[i] = ce[i].u, ev[i] = ce[i].v, cost[i] = ce[i].w, col_orig[i] = ce[i].orig, col_chain[i] = ce[i].chain;
+            if (ce[i].chain >= 0) chains[ce[i].chain].col_ab = i;
+        }
+        for (int v = 0; v < n; ++v) {
+            int c = ne + v;
+            eu[c] = v, ev[c] = n, zcol[v] = c;
+            cost[c] = (bonus && corig[v] != forced) ? (*bonus)[corig[v]] : 0.0;
+        }
+        for (int k = 0; k < (int)chains.size(); ++k) {
+            int ca = ne + n + 2 * k, cb = ca + 1;
+            eu[ca] = chains[k].a, ev[ca] = n, cost[ca] = chains[k].Pa, chains[k].col_za = ca;
+            eu[cb] = chains[k].b, ev[cb] = n, cost[cb] = chains[k].Pb, chains[k].col_zb = cb;
+        }
         lp.init(S, cost);
         lp.ctl = &ctl;
         cols.assign(S, {});
+        std::vector<std::vector<std::pair<int, double>>> rows(N);
+        for (int i = 0; i < m; ++i) rows[eu[i]].push_back({i, 1.0}), rows[ev[i]].push_back({i, 1.0});
         for (int v = 0; v < N; ++v) {  // degree rows
-            std::vector<std::pair<int, double>> a;
-            for (int i = 0; i < m; ++i)
-                if (eu[i] == v || ev[i] == v) a.push_back({i, 1.0});
-            a.push_back({m + v, -2.0});
-            add_row(a, 0.0, true);
+            rows[v].push_back({m + v, -2.0});
+            add_row(rows[v], 0.0, true);
         }
         if (forced >= 0) {  // a path from `forced`: z used, edge forced-z taken
             lp.set_bounds(m + n, 1.0, 1.0);
-            lp.set_bounds(ne + forced, 1.0, 1.0);
+            lp.set_bounds(zcol[cmap[forced]], 1.0, 1.0);
         }
         // (a one-vertex "path" z-v-z would need edge v-z twice, which its bound forbids)
         if (order == 1) best_first(res);
         else dfs(res);
         res.lps = lps;
         res.cuts = lp.R - N;
+        res.chains = (long long)chains.size();
         res.proved = proved;
         return res;
     }
@@ -403,8 +478,25 @@ class LPBranchCutT {
     int forced;
     Incumbent& inc;
     Control& ctl;
-    int n = 0, N = 0, ne = 0, S = 0;
+    int n = 0, N = 0, ne = 0, S = 0;  // n: LP vertices (contracted), N = n + 1 (z), ne: graph edge columns
+    int m = 0;                          // x columns: ne graph edges, then z edges
     std::vector<int> eu, ev;
+    // Chains of degree-2 vertices (no bonus, not forced) are contracted to one edge a-b: the same
+    // path values, far fewer rows. A path may also end inside a chain, entering from a or from b:
+    // two extra z edges per chain worth the chain minus its last edge. Using two of {a-b, end from
+    // a, end from b} is never optimal (the cycle through the chain and the rest of the path is
+    // longer), so x_ab + x_za + x_zb <= 1 is added when violated.
+    struct Chain {
+        int a, b;                 // LP vertex ids
+        std::vector<int> inner;   // original interior vertices, from a to b
+        double W, Pa, Pb;
+        int col_ab, col_za, col_zb;
+    };
+    std::vector<Chain> chains;
+    std::vector<int> corig;                 // LP vertex -> original vertex
+    std::vector<int> col_orig;              // edge column -> original edge id, or -1 for a chain edge
+    std::vector<int> col_chain;             // edge column -> chain id, or -1
+    std::vector<int> zcol;                  // LP vertex -> its z edge column
     LPT lp;
     std::vector<std::vector<std::pair<int, double>>> cols;
     long long nodes = 0, lps = 0;
@@ -443,7 +535,6 @@ class LPBranchCutT {
     // (a Chvatal-Gomory cut), so it is valid whatever H and T are. Candidates: H = a connected
     // piece of the fractional edges, T = the edges leaving H with x > 1/2 (made odd if needed).
     int separate_blossoms() {
-        int m = ne + n;
         std::vector<double> x(m), y(N);
         for (int i = 0; i < m; ++i) x[i] = lp.xval(i);
         for (int v = 0; v < N; ++v) y[v] = lp.xval(m + v);
@@ -497,7 +588,6 @@ class LPBranchCutT {
    private:
 
     int separate() {
-        int m = ne + n;
         std::vector<double> x(m), y(N);
         for (int i = 0; i < m; ++i) x[i] = lp.xval(i);
         for (int v = 0; v < N; ++v) y[v] = lp.xval(m + v);
@@ -589,13 +679,48 @@ class LPBranchCutT {
     }
 
     // integral point with no violated cut: rebuild the cycle / path and offer it
+    int separate_chains() {
+        int added = 0;
+        for (auto& c : chains) {
+            if (lp.xval(c.col_ab) + lp.xval(c.col_za) + lp.xval(c.col_zb) <= 1 + 1e-6) continue;
+            add_row({{c.col_ab, 1.0}, {c.col_za, 1.0}, {c.col_zb, 1.0}}, 1.0, false);
+            ++added;
+        }
+        return added;
+    }
+
+    // the original vertices a column stands for, in order (z is g.n)
+    std::vector<int> expand(int i) const {
+        int Z = g.n;
+        if (i >= ne + n) {  // a chain end
+            const Chain& c = chains[(i - ne - n) / 2];
+            std::vector<int> r;
+            if ((i - ne - n) % 2 == 0) r.push_back(corig[c.a]), r.insert(r.end(), c.inner.begin(), c.inner.end());
+            else r.push_back(corig[c.b]), r.insert(r.end(), c.inner.rbegin(), c.inner.rend());
+            r.push_back(Z);
+            return r;
+        }
+        if (i >= ne) return {corig[eu[i]], Z};
+        if (col_chain[i] >= 0) {
+            const Chain& c = chains[col_chain[i]];
+            std::vector<int> r{corig[c.a]};
+            r.insert(r.end(), c.inner.begin(), c.inner.end());
+            r.push_back(corig[c.b]);
+            return r;
+        }
+        return {corig[eu[i]], corig[ev[i]]};
+    }
+
     void take_integral() {
-        int m = ne + n;
-        std::vector<std::vector<int>> nb(N);
+        int Z = g.n;
+        std::vector<std::vector<int>> nb(g.n + 1);
         for (int i = 0; i < m; ++i)
-            if (lp.xval(i) > 0.5) nb[eu[i]].push_back(ev[i]), nb[ev[i]].push_back(eu[i]);
+            if (lp.xval(i) > 0.5) {
+                auto seq = expand(i);
+                for (size_t k = 0; k + 1 < seq.size(); ++k) nb[seq[k]].push_back(seq[k + 1]), nb[seq[k + 1]].push_back(seq[k]);
+            }
         int start = -1;
-        for (int v = 0; v < N; ++v)
+        for (int v = 0; v <= g.n; ++v)
             if (!nb[v].empty()) {
                 start = v;
                 break;
@@ -606,12 +731,12 @@ class LPBranchCutT {
             if (nb[cur].size() != 2) return;
             int nx = nb[cur][0] == prev ? nb[cur][1] : nb[cur][0];
             if (nx == start) break;
-            if ((int)cyc.size() > N) return;
+            if ((int)cyc.size() > g.n + 1) return;
             cyc.push_back(nx);
             prev = cur, cur = nx;
         }
         // rotate so that z (if present) is first, then drop it: a path
-        auto it = std::find(cyc.begin(), cyc.end(), n);
+        auto it = std::find(cyc.begin(), cyc.end(), Z);
         std::vector<int> path;
         if (it != cyc.end()) {
             std::rotate(cyc.begin(), it, cyc.end());
@@ -645,7 +770,7 @@ class LPBranchCutT {
         for (int j = lo; j < hi; ++j) {
             double x = lp.xval(j), f = std::min(x, 1 - x);
             if (f <= 1e-6) continue;
-            if (lo == ne + n) return j;
+            if (lo == m) return j;
             if (f > best) best = f, q = j;
         }
         return q;
@@ -677,13 +802,13 @@ class LPBranchCutT {
             if (!gt(ub, inc.get())) return -1;
             last_ub = ub;
             purge();
-            int added = (round < 50) ? separate() : 0;
+            int added = (round < 50) ? separate_chains() : 0;
+            if (!added && round < 50) added = separate();
             if (!added && blossoms && round < 50) added = separate_blossoms();
             if (added) continue;
             break;
         }
         // branching variable (y first: whether a vertex is used)
-        int m = ne + n;
         int q = pick(m, S);
         if (q < 0) q = pick(0, m);
         if (q < 0) {
@@ -771,7 +896,7 @@ using LPResult = LPBranchCutT<BoundedSimplex>::Result;
 struct LPOptions {
     long long node_cap = 3000;
     int cuts_round = 20;
-    bool blossoms = true, race = false;
+    bool blossoms = true, race = false, contract = true;
     int order = 1;
     double plunge = 5e-4;
 };
@@ -788,8 +913,9 @@ inline LPResult run_lp_bnc(bool revised, const Graph& g, const std::vector<doubl
         bc.blossoms = o.blossoms;
         bc.order = order;
         bc.plunge = o.plunge;
+        bc.contract = o.contract;
     };
-    auto finish = [](auto&, const auto& r) { return LPResult{r.proved, r.nodes, r.lps, r.cuts}; };
+    auto finish = [](auto&, const auto& r) { return LPResult{r.proved, r.nodes, r.lps, r.cuts, r.chains}; };
     if (o.race && revised) {
         LPBranchCutT<RevisedSimplex> a(g, bonus, forced, inc, ctl), b(g, bonus, forced, inc, ctl);
         setup(a, 0), setup(b, 1);
