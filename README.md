@@ -29,7 +29,7 @@ clang++ -std=c++20 -O3 -pthread -o longest src/main.cpp         # Mac
 cl /std:c++20 /O2 /EHsc /utf-8 src\main.cpp /Fe:longest.exe     # Windows（Developer Command Prompt for VS）
 ```
 
-動作確認済みの環境：Linux x86_64（GCC 13.3、CMake 3.28）、Windows 10（Visual Studio 2019 の MSVC 19.29、CMake 4.4）。Mac は上の手順を想定していますが、実機では未確認です。
+動作確認済みの環境：Linux x86_64（GCC 13.3、CMake 3.28）、Windows 10（Visual Studio 2019 の MSVC 19.29、CMake 4.4。再現性チェックで探索の道筋が Linux と一致することを確認）。Mac は上の手順を想定していますが、実機では未確認です。
 
 ## 使い方
 
